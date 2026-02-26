@@ -21,5 +21,8 @@ Thumbs.db
 /dist/
 /release/
 
+# Plans (local only)
+docs/plans/
+
 # Config (don't commit real configs)
 config.yaml

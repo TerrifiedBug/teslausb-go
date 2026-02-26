@@ -1,0 +1,17 @@
+# WiFi is configured via Raspberry Pi Imager, not here.
+
+nfs:
+  server: "192.168.1.100"
+  share: "/volume1/TeslaCam"
+
+keep_awake:
+  method: "ble"       # "ble" or "webhook"
+  vin: ""
+  webhook_url: ""
+
+notifications:
+  webhook_url: ""
+
+temperature:
+  warning_celsius: 70
+  caution_celsius: 60
