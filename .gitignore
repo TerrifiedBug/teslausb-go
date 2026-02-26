@@ -1,0 +1,25 @@
+# Go
+/teslausb
+/teslausb-*
+*.exe
+
+# Web
+web/node_modules/
+web/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+/dist/
+/release/
+
+# Config (don't commit real configs)
+config.yaml
