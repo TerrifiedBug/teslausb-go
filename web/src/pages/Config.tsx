@@ -50,6 +50,26 @@ export function Config() {
     setTesting(false);
   };
 
+  const testCIFS = async () => {
+    if (!config?.cifs.server || !config?.cifs.share) {
+      setMessage('Enter server and share first');
+      return;
+    }
+    setTesting(true);
+    setMessage('');
+    try {
+      const result = await api.testCIFS(config.cifs.server, config.cifs.share, config.cifs.username, config.cifs.password);
+      if (result.ok) {
+        setMessage(result.message || 'CIFS connection successful');
+      } else {
+        setMessage(`Error: ${result.error}`);
+      }
+    } catch (e: any) {
+      setMessage(`Error: ${e.message}`);
+    }
+    setTesting(false);
+  };
+
   const pairBLE = async () => {
     if (!config?.keep_awake.vin) return;
     try {
@@ -62,41 +82,109 @@ export function Config() {
 
   if (!config) return <div className="text-gray-500">Loading...</div>;
 
-  const update = (section: string, key: string, value: string | number) => {
+  const update = (section: string, key: string, value: string | number | boolean) => {
     setConfig(prev => prev ? { ...prev, [section]: { ...(prev as any)[section], [key]: value } } : prev);
   };
+
+  const archiveMethod = config.archive?.method || 'nfs';
 
   return (
     <div className="space-y-6">
       <section className="bg-gray-900 rounded-lg p-4 border border-gray-800 space-y-3">
-        <h2 className="text-sm font-medium text-gray-300">NFS Server</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-gray-500">Server</label>
-            <input
-              value={config.nfs.server}
-              onChange={e => update('nfs', 'server', e.target.value)}
-              className="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
-              placeholder="192.168.1.100"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500">Share</label>
-            <input
-              value={config.nfs.share}
-              onChange={e => update('nfs', 'share', e.target.value)}
-              className="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
-              placeholder="/volume1/TeslaCam"
-            />
-          </div>
+        <h2 className="text-sm font-medium text-gray-300">Archive Server</h2>
+        <div className="flex gap-2 mb-3">
+          {['nfs', 'cifs'].map(method => (
+            <button
+              key={method}
+              onClick={() => update('archive', 'method', method)}
+              className={`px-3 py-1.5 rounded text-sm ${
+                archiveMethod === method ? 'bg-blue-600' : 'bg-gray-800 text-gray-400'
+              }`}
+            >
+              {method.toUpperCase()}
+            </button>
+          ))}
         </div>
-        <button
-          onClick={testNFS}
-          disabled={testing}
-          className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-sm text-gray-300"
-        >
-          {testing ? 'Testing...' : 'Test Connection'}
-        </button>
+        {archiveMethod === 'nfs' ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500">Server</label>
+                <input
+                  value={config.nfs.server}
+                  onChange={e => update('nfs', 'server', e.target.value)}
+                  className="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                  placeholder="192.168.1.100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Share</label>
+                <input
+                  value={config.nfs.share}
+                  onChange={e => update('nfs', 'share', e.target.value)}
+                  className="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                  placeholder="/volume1/TeslaCam"
+                />
+              </div>
+            </div>
+            <button
+              onClick={testNFS}
+              disabled={testing}
+              className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-sm text-gray-300"
+            >
+              {testing ? 'Testing...' : 'Test Connection'}
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500">Server</label>
+                <input
+                  value={config.cifs?.server ?? ''}
+                  onChange={e => update('cifs', 'server', e.target.value)}
+                  className="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                  placeholder="192.168.1.100"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Share</label>
+                <input
+                  value={config.cifs?.share ?? ''}
+                  onChange={e => update('cifs', 'share', e.target.value)}
+                  className="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                  placeholder="TeslaCam"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Username</label>
+                <input
+                  value={config.cifs?.username ?? ''}
+                  onChange={e => update('cifs', 'username', e.target.value)}
+                  className="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                  placeholder="user"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500">Password</label>
+                <input
+                  type="password"
+                  value={config.cifs?.password ?? ''}
+                  onChange={e => update('cifs', 'password', e.target.value)}
+                  className="w-full mt-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+                  placeholder="password"
+                />
+              </div>
+            </div>
+            <button
+              onClick={testCIFS}
+              disabled={testing}
+              className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-sm text-gray-300"
+            >
+              {testing ? 'Testing...' : 'Test Connection'}
+            </button>
+          </>
+        )}
       </section>
 
       <section className="bg-gray-900 rounded-lg p-4 border border-gray-800 space-y-3">
@@ -105,12 +193,27 @@ export function Config() {
           <input
             type="checkbox"
             checked={config.archive?.recent_clips ?? false}
-            onChange={e => update('archive', 'recent_clips', e.target.checked as any)}
+            onChange={e => update('archive', 'recent_clips', e.target.checked)}
             className="rounded border-gray-700 bg-gray-800"
           />
           Archive RecentClips
-          <span className="text-xs text-gray-500">(rolling dashcam footage — uses more NFS storage)</span>
+          <span className="text-xs text-gray-500">(rolling dashcam footage — uses more storage)</span>
         </label>
+        <div>
+          <label className="text-xs text-gray-500">Reserve Space (%)</label>
+          <div className="flex items-center gap-3 mt-1">
+            <input
+              type="range"
+              min={1}
+              max={50}
+              value={config.archive?.reserve_percent || 10}
+              onChange={e => update('archive', 'reserve_percent', Number(e.target.value))}
+              className="flex-1"
+            />
+            <span className="text-sm text-gray-300 w-10 text-right">{config.archive?.reserve_percent || 10}%</span>
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">Minimum 2 GB reserved regardless of percentage</div>
+        </div>
       </section>
 
       <section className="bg-gray-900 rounded-lg p-4 border border-gray-800 space-y-3">

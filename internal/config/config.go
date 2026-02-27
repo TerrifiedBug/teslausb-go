@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	NFS           NFS           `yaml:"nfs" json:"nfs"`
+	CIFS          CIFS          `yaml:"cifs" json:"cifs"`
 	Archive       Archive       `yaml:"archive" json:"archive"`
 	KeepAwake     KeepAwake     `yaml:"keep_awake" json:"keep_awake"`
 	Notifications Notifications `yaml:"notifications" json:"notifications"`
@@ -16,7 +17,16 @@ type Config struct {
 }
 
 type Archive struct {
-	RecentClips bool `yaml:"recent_clips" json:"recent_clips"`
+	RecentClips    bool   `yaml:"recent_clips" json:"recent_clips"`
+	ReservePercent int    `yaml:"reserve_percent" json:"reserve_percent"`
+	Method         string `yaml:"method" json:"method"` // "nfs" or "cifs"
+}
+
+type CIFS struct {
+	Server   string `yaml:"server" json:"server"`
+	Share    string `yaml:"share" json:"share"`
+	Username string `yaml:"username" json:"username"`
+	Password string `yaml:"password" json:"password"`
 }
 
 type NFS struct {
@@ -54,6 +64,14 @@ func Load(path string) (*Config, error) {
 	cfg.Temperature.CautionCelsius = 60
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
+	}
+	// Clamp reserve percent to valid range
+	if cfg.Archive.ReservePercent < 1 || cfg.Archive.ReservePercent > 50 {
+		cfg.Archive.ReservePercent = 10
+	}
+	// Default archive method to NFS
+	if cfg.Archive.Method != "nfs" && cfg.Archive.Method != "cifs" {
+		cfg.Archive.Method = "nfs"
 	}
 	mu.Lock()
 	current = &cfg

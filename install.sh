@@ -67,7 +67,7 @@ fi
 # First install — configure system
 echo "Installing packages..."
 apt-get update -qq >/dev/null
-apt-get install -y -qq exfatprogs nfs-common rsync bluez fdisk ntpsec-ntpdate >/dev/null 2>&1
+apt-get install -y -qq exfatprogs nfs-common cifs-utils rsync bluez fdisk ntpsec-ntpdate >/dev/null 2>&1
 
 echo "Disabling unnecessary services..."
 systemctl disable --now apt-daily.timer apt-daily-upgrade.timer dpkg-db-backup.timer 2>/dev/null || true
@@ -97,9 +97,18 @@ mkdir -p /backingfiles /mnt/cam /mnt/archive /mutable/teslausb /mutable/ble /mut
 # Default config
 if [ ! -f /mutable/teslausb/config.yaml ]; then
   cat > /mutable/teslausb/config.yaml << 'YAML'
+archive:
+  recent_clips: false
+  reserve_percent: 10
+  method: "nfs"
 nfs:
   server: ""
   share: ""
+cifs:
+  server: ""
+  share: ""
+  username: ""
+  password: ""
 keep_awake:
   method: "ble"
   vin: ""
@@ -131,7 +140,38 @@ SERVICE
 systemctl daemon-reload
 systemctl enable -q teslausb
 
+# Read-only root filesystem (protect SD card from power-loss corruption)
+echo "Configuring read-only root filesystem..."
+
+# Backup boot config files before modifying
+cp -n /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak
+cp -n /etc/fstab /etc/fstab.bak
+
+# Add ro, fastboot, noswap to kernel cmdline if not present
+if ! grep -q '\bro\b' /boot/firmware/cmdline.txt; then
+  sed -i 's/$/ fastboot noswap ro/' /boot/firmware/cmdline.txt
+fi
+
+# Add tmpfs mounts for writable paths
+if ! grep -q 'tmpfs.*/tmp' /etc/fstab; then
+  cat >> /etc/fstab << 'FSTAB'
+
+# tmpfs for read-only root
+tmpfs /tmp tmpfs nosuid,nodev 0 0
+tmpfs /var/log tmpfs nosuid,nodev,noexec,size=32M 0 0
+tmpfs /var/tmp tmpfs nosuid,nodev 0 0
+tmpfs /var/lib/systemd tmpfs nosuid,nodev 0 0
+tmpfs /var/lib/dhcpcd tmpfs nosuid,nodev 0 0
+FSTAB
+fi
+
+# Mark root as read-only in fstab
+if grep -q '/ .*ext4' /etc/fstab; then
+  sed -i 's|\(.*/ .*ext4.*\)defaults\(.*\)|\1defaults,ro\2|' /etc/fstab
+fi
+
 echo ""
 echo "=== Setup complete! ==="
+echo "Root filesystem is read-only. /mutable/ remains writable for config and data."
 echo "Run 'sudo reboot' to enable USB gadget mode."
 echo "After reboot, open http://$(hostname).local to configure."

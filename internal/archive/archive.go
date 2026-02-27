@@ -16,18 +16,75 @@ import (
 
 const ArchiveMount = "/mnt/archive"
 
-// IsReachable checks if the NFS server is reachable via TCP port 2049.
+// IsReachable checks if the archive server is reachable via TCP.
 func IsReachable() bool {
 	cfg := config.Get()
-	if cfg == nil || cfg.NFS.Server == "" {
+	if cfg == nil {
 		return false
 	}
-	conn, err := net.DialTimeout("tcp", cfg.NFS.Server+":2049", 5*time.Second)
+	if cfg.Archive.Method == "cifs" {
+		return tcpReachable(cfg.CIFS.Server, "445")
+	}
+	return tcpReachable(cfg.NFS.Server, "2049")
+}
+
+func tcpReachable(host, port string) bool {
+	if host == "" {
+		return false
+	}
+	conn, err := net.DialTimeout("tcp", host+":"+port, 5*time.Second)
 	if err != nil {
 		return false
 	}
 	conn.Close()
 	return true
+}
+
+// MountArchive mounts the archive share based on configured method.
+func MountArchive() error {
+	cfg := config.Get()
+	if cfg != nil && cfg.Archive.Method == "cifs" {
+		return MountCIFS()
+	}
+	return MountNFS()
+}
+
+// UnmountArchive unmounts the archive share.
+func UnmountArchive() {
+	exec.Command("umount", "-f", "-l", ArchiveMount).Run()
+	log.Println("archive unmounted")
+}
+
+const cifsCredFile = "/mutable/teslausb/.cifs-credentials"
+
+// MountCIFS mounts the configured CIFS/SMB share with auto-negotiation.
+// Uses a credentials file so passwords aren't visible in ps output.
+func MountCIFS() error {
+	cfg := config.Get()
+	if cfg == nil {
+		return fmt.Errorf("no config")
+	}
+	os.MkdirAll(ArchiveMount, 0755)
+	source := fmt.Sprintf("//%s/%s", cfg.CIFS.Server, cfg.CIFS.Share)
+
+	// Write credentials to a file (mode 0600) to keep passwords out of ps output
+	credContent := fmt.Sprintf("username=%s\npassword=%s\n", cfg.CIFS.Username, cfg.CIFS.Password)
+	if err := os.WriteFile(cifsCredFile, []byte(credContent), 0600); err != nil {
+		return fmt.Errorf("write CIFS credentials: %w", err)
+	}
+	defer os.Remove(cifsCredFile)
+
+	opts := fmt.Sprintf("credentials=%s,iocharset=utf8,file_mode=0777,dir_mode=0777", cifsCredFile)
+
+	// Try SMB versions in order: 3.0, 2.1, 2.0
+	for _, ver := range []string{"3.0", "2.1", "2.0"} {
+		verOpts := opts + ",vers=" + ver
+		if err := exec.Command("mount", "-t", "cifs", source, ArchiveMount, "-o", verOpts).Run(); err == nil {
+			log.Printf("CIFS mounted: %s (SMB %s)", source, ver)
+			return nil
+		}
+	}
+	return fmt.Errorf("mount CIFS %s: all SMB versions failed", source)
 }
 
 // MountNFS mounts the configured NFS share.
@@ -44,12 +101,6 @@ func MountNFS() error {
 	}
 	log.Printf("NFS mounted: %s", source)
 	return nil
-}
-
-// UnmountNFS unmounts the NFS share.
-func UnmountNFS() {
-	exec.Command("umount", "-f", "-l", ArchiveMount).Run()
-	log.Println("NFS unmounted")
 }
 
 // ArchiveClips copies SavedClips and SentryClips (and optionally RecentClips) to the NFS share via rsync.
@@ -114,9 +165,17 @@ func ArchiveClips(ctx context.Context) (int, int64, error) {
 			return totalClips, totalBytes, ctx.Err()
 		}
 
-		// Count archived items on destination
-		dstEntries, _ := filepath.Glob(filepath.Join(dst, "*"))
-		totalClips += len(dstEntries)
+		// Count archived items and bytes on destination
+		dstEntries, _ := os.ReadDir(dst)
+		for _, e := range dstEntries {
+			if e.IsDir() {
+				continue
+			}
+			totalClips++
+			if info, err := e.Info(); err == nil {
+				totalBytes += info.Size()
+			}
+		}
 	}
 
 	// Clean empty directories in source

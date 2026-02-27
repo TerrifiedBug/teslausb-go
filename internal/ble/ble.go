@@ -15,18 +15,11 @@ const (
 	PublicKey  = "/mutable/ble/key_public.pem"
 )
 
-func teslaControl() string {
-	if p, err := exec.LookPath("tesla-control"); err == nil {
+func findBin(name string) string {
+	if p, err := exec.LookPath(name); err == nil {
 		return p
 	}
-	return "/usr/local/bin/tesla-control"
-}
-
-func teslaKeygen() string {
-	if p, err := exec.LookPath("tesla-keygen"); err == nil {
-		return p
-	}
-	return "/usr/local/bin/tesla-keygen"
+	return "/usr/local/bin/" + name
 }
 
 // acquireHCI stops bluetoothd so tesla-control can get exclusive HCI access.
@@ -48,7 +41,7 @@ func runBLE(vin string, args ...string) error {
 	defer release()
 
 	for attempt := 1; attempt <= 3; attempt++ {
-		cmd := exec.Command(teslaControl(), baseArgs...)
+		cmd := exec.Command(findBin("tesla-control"), baseArgs...)
 		out, err := cmd.CombinedOutput()
 		if err == nil {
 			return nil
@@ -75,7 +68,7 @@ func KeysExist() bool {
 
 func GenerateKeys() error {
 	os.MkdirAll(KeyDir, 0700)
-	cmd := exec.Command(teslaKeygen(), "-key-file", PrivateKey, "-output", PublicKey, "create")
+	cmd := exec.Command(findBin("tesla-keygen"), "-key-file", PrivateKey, "-output", PublicKey, "create")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("keygen: %s: %w", out, err)
@@ -96,7 +89,7 @@ func Pair(vin string) error {
 	release := acquireHCI()
 	defer release()
 
-	cmd := exec.Command(teslaControl(), "-ble", "-vin", strings.ToUpper(vin),
+	cmd := exec.Command(findBin("tesla-control"), "-ble", "-vin", strings.ToUpper(vin),
 		"add-key-request", PublicKey, "owner", "cloud_key")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -110,7 +103,7 @@ func IsPaired(vin string) bool {
 	release := acquireHCI()
 	defer release()
 
-	cmd := exec.Command(teslaControl(), "-ble", "-key-file", PrivateKey,
+	cmd := exec.Command(findBin("tesla-control"), "-ble", "-key-file", PrivateKey,
 		"-vin", strings.ToUpper(vin), "body-controller-state")
 	return cmd.Run() == nil
 }

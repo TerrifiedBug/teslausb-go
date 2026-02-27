@@ -18,10 +18,6 @@ func NewHub() *Hub {
 	return &Hub{clients: make(map[*websocket.Conn]bool)}
 }
 
-func (h *Hub) Run() {
-	// Hub is passive — broadcasts are triggered externally
-}
-
 func (h *Hub) HandleWS(w http.ResponseWriter, r *http.Request) {
 	websocket.Handler(func(ws *websocket.Conn) {
 		h.mu.Lock()

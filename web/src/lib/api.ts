@@ -17,6 +17,12 @@ export interface Status {
   last_error: string;
   archive_clips: number;
   archive_bytes: number;
+  total_archive_clips: number;
+  total_archive_bytes: number;
+  archive_count: number;
+  wifi_ssid: string;
+  wifi_signal_dbm: number;
+  wifi_ip: string;
 }
 
 export interface FileEntry {
@@ -28,7 +34,8 @@ export interface FileEntry {
 
 export interface Config {
   nfs: { server: string; share: string };
-  archive: { recent_clips: boolean };
+  cifs: { server: string; share: string; username: string; password: string };
+  archive: { recent_clips: boolean; reserve_percent: number; method: string };
   keep_awake: { method: string; vin: string; webhook_url: string };
   notifications: { webhook_url: string };
   temperature: { warning_celsius: number; caution_celsius: number };
@@ -37,6 +44,13 @@ export interface Config {
 export interface BLEStatus {
   keys_exist: boolean;
   paired: boolean;
+}
+
+export interface UpdateInfo {
+  available: boolean;
+  version?: string;
+  notes?: string;
+  error?: string;
 }
 
 export const api = {
@@ -53,6 +67,12 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ server, share }),
   }),
+  testCIFS: (server: string, share: string, username: string, password: string) =>
+    fetchJSON<{ok: boolean; error?: string; message?: string}>('/api/cifs/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ server, share, username, password }),
+    }),
   getConfig: () => fetchJSON<Config>('/api/config'),
   saveConfig: (config: Config) => fetchJSON<{status: string}>('/api/config', {
     method: 'POST',
@@ -67,4 +87,6 @@ export const api = {
   }),
   getBLEStatus: () => fetchJSON<BLEStatus>('/api/ble/status'),
   getLogs: () => fetchJSON<string[]>('/api/logs'),
+  checkUpdate: () => fetchJSON<UpdateInfo>('/api/update/check'),
+  applyUpdate: () => fetchJSON<{status: string}>('/api/update/apply', { method: 'POST' }),
 };
