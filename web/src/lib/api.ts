@@ -47,6 +47,11 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path }),
   }),
+  testNFS: (server: string, share: string) => fetchJSON<{ok: boolean; error?: string; message?: string}>('/api/nfs/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ server, share }),
+  }),
   getConfig: () => fetchJSON<Config>('/api/config'),
   saveConfig: (config: Config) => fetchJSON<{status: string}>('/api/config', {
     method: 'POST',

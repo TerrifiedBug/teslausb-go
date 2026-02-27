@@ -25,6 +25,28 @@ export function Config() {
     setSaving(false);
   };
 
+  const [testing, setTesting] = useState(false);
+
+  const testNFS = async () => {
+    if (!config?.nfs.server || !config?.nfs.share) {
+      setMessage('Enter server and share first');
+      return;
+    }
+    setTesting(true);
+    setMessage('');
+    try {
+      const result = await api.testNFS(config.nfs.server, config.nfs.share);
+      if (result.ok) {
+        setMessage(result.message || 'NFS connection successful');
+      } else {
+        setMessage(`Error: ${result.error}`);
+      }
+    } catch (e: any) {
+      setMessage(`Error: ${e.message}`);
+    }
+    setTesting(false);
+  };
+
   const pairBLE = async () => {
     if (!config?.keep_awake.vin) return;
     try {
@@ -65,6 +87,13 @@ export function Config() {
             />
           </div>
         </div>
+        <button
+          onClick={testNFS}
+          disabled={testing}
+          className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-sm text-gray-300"
+        >
+          {testing ? 'Testing...' : 'Test Connection'}
+        </button>
       </section>
 
       <section className="bg-gray-900 rounded-lg p-4 border border-gray-800 space-y-3">

@@ -2,14 +2,17 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/teslausb-go/teslausb/internal/ble"
 	"github.com/teslausb-go/teslausb/internal/config"
@@ -49,6 +52,7 @@ func (s *Server) Start(addr string) error {
 	mux.HandleFunc("POST /api/files/delete", s.handleDeleteFile)
 	mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	mux.HandleFunc("POST /api/config", s.handleSaveConfig)
+	mux.HandleFunc("POST /api/nfs/test", s.handleTestNFS)
 	mux.HandleFunc("POST /api/archive/trigger", s.handleTriggerArchive)
 	mux.HandleFunc("POST /api/ble/pair", s.handleBLEPair)
 	mux.HandleFunc("GET /api/ble/status", s.handleBLEStatus)
@@ -183,6 +187,43 @@ func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleTestNFS(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Server string `json:"server"`
+		Share  string `json:"share"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	if req.Server == "" || req.Share == "" {
+		http.Error(w, "server and share required", 400)
+		return
+	}
+
+	// Test TCP connectivity to NFS port
+	conn, err := net.DialTimeout("tcp", req.Server+":2049", 5*time.Second)
+	if err != nil {
+		jsonResponse(w, map[string]any{"ok": false, "error": fmt.Sprintf("Cannot reach %s:2049 — %v", req.Server, err)})
+		return
+	}
+	conn.Close()
+
+	// Try a temporary mount
+	testDir := "/tmp/nfs-test"
+	os.MkdirAll(testDir, 0755)
+	defer func() {
+		exec.Command("umount", "-f", "-l", testDir).Run()
+		os.Remove(testDir)
+	}()
+
+	source := fmt.Sprintf("%s:%s", req.Server, req.Share)
+	out, err := exec.Command("mount", "-t", "nfs", source, testDir, "-o", "ro,nolock,proto=tcp,vers=3,timeo=10,retrans=1").CombinedOutput()
+	if err != nil {
+		jsonResponse(w, map[string]any{"ok": false, "error": fmt.Sprintf("Mount failed: %s", strings.TrimSpace(string(out)))})
+		return
+	}
+
+	jsonResponse(w, map[string]any{"ok": true, "message": fmt.Sprintf("Successfully mounted %s", source)})
 }
 
 func (s *Server) handleTriggerArchive(w http.ResponseWriter, r *http.Request) {
