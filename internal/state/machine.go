@@ -215,7 +215,7 @@ func (m *Machine) runArriving(ctx context.Context) {
 func (m *Machine) runArchiving(ctx context.Context) {
 	cfg := config.Get()
 
-	m.sendKeepAwake(ctx, cfg, "archive_started")
+	m.sendKeepAwake(ctx, cfg, "start")
 
 	keepAliveCtx, keepAliveCancel := context.WithCancel(ctx)
 	go func() {
@@ -226,7 +226,7 @@ func (m *Machine) runArchiving(ctx context.Context) {
 			case <-keepAliveCtx.Done():
 				return
 			case <-ticker.C:
-				m.sendKeepAwake(keepAliveCtx, cfg, "keep_awake")
+				m.sendKeepAwake(keepAliveCtx, cfg, "nudge")
 			}
 		}
 	}()
@@ -274,10 +274,7 @@ func (m *Machine) runIdle(ctx context.Context) {
 	system.SetLED("heartbeat")
 
 	cfg := config.Get()
-	m.sendKeepAwake(ctx, cfg, "archive_complete")
-	if cfg != nil && cfg.KeepAwake.Method == "ble" && cfg.KeepAwake.VIN != "" {
-		ble.SentryOff(cfg.KeepAwake.VIN)
-	}
+	m.sendKeepAwake(ctx, cfg, "stop")
 
 	archive.UnmountNFS()
 	disk.Unmount()
@@ -316,18 +313,25 @@ func (m *Machine) runIdle(ctx context.Context) {
 	}
 }
 
-func (m *Machine) sendKeepAwake(ctx context.Context, cfg *config.Config, event string) {
+func (m *Machine) sendKeepAwake(ctx context.Context, cfg *config.Config, command string) {
 	if cfg == nil {
 		return
 	}
 	switch cfg.KeepAwake.Method {
 	case "ble":
 		if cfg.KeepAwake.VIN != "" {
-			ble.KeepAwake(cfg.KeepAwake.VIN)
+			if command == "stop" {
+				ble.SentryOff(cfg.KeepAwake.VIN)
+			} else {
+				ble.KeepAwake(cfg.KeepAwake.VIN)
+			}
 		}
 	case "webhook":
 		if cfg.KeepAwake.WebhookURL != "" {
-			webhook.Send(ctx, cfg.KeepAwake.WebhookURL, webhook.Event{Event: event})
+			webhook.Send(ctx, cfg.KeepAwake.WebhookURL, webhook.Event{
+				Event: "keep_awake",
+				Data:  map[string]any{"awake_command": command},
+			})
 		}
 	}
 }
