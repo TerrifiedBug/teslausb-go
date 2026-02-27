@@ -30,9 +30,10 @@ if [ -z "$LATEST" ]; then
 fi
 echo "Latest release: $LATEST"
 
-# Download teslausb binary
+# Download teslausb binary (use temp file to avoid ETXTBSY on running binary)
 echo "Downloading teslausb..."
-curl -fsSL "https://github.com/$REPO/releases/download/$LATEST/teslausb-linux-$GOARCH" -o /usr/local/bin/teslausb
+curl -fsSL "https://github.com/$REPO/releases/download/$LATEST/teslausb-linux-$GOARCH" -o /usr/local/bin/teslausb.new
+mv /usr/local/bin/teslausb.new /usr/local/bin/teslausb
 chmod +x /usr/local/bin/teslausb
 echo "Installed teslausb $(/usr/local/bin/teslausb -version 2>/dev/null || echo "$LATEST")"
 
