@@ -76,6 +76,9 @@ func main() {
 
 	// Start web server
 	srv := web.NewServer(machine, version, *configPath)
+	if staticFS := web.EmbeddedStaticFS(); staticFS != nil {
+		srv.SetStaticFS(staticFS)
+	}
 	go srv.Start(*listenAddr)
 
 	// Run state machine (blocks until context cancelled)

@@ -91,9 +91,12 @@ func (m *Machine) Run(ctx context.Context) error {
 		}
 	}
 
-	// Enable USB gadget
+	// Enable USB gadget (non-fatal — web UI should work even without UDC)
 	if err := gadget.Enable(disk.BackingFile); err != nil {
-		return fmt.Errorf("enable gadget: %w", err)
+		log.Printf("warning: %v (web UI still available, gadget will retry when connected to vehicle)", err)
+		m.mu.Lock()
+		m.lastError = err.Error()
+		m.mu.Unlock()
 	}
 
 	m.setState(StateAway)
