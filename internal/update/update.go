@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const repo = "teslausb-go/teslausb"
+const repo = "TerrifiedBug/teslausb-go"
 
 type Release struct {
 	TagName string `json:"tag_name"`

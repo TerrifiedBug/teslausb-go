@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO="teslausb-go/teslausb"
+REPO="TerrifiedBug/teslausb-go"
 MIKE_REPO="MikeBishop/tesla-vehicle-command-arm-binaries"
 
 echo "=== teslausb-go installer ==="

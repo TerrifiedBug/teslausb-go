@@ -27,7 +27,7 @@ The original project spans roughly 14,000 lines of bash, Python, and JavaScript.
 SSH into the Pi and run:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/teslausb-go/teslausb/main/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/TerrifiedBug/teslausb-go/main/install.sh | sudo bash
 ```
 
 The installer downloads the binary and `tesla-control`, installs required system packages (`exfatprogs`, `nfs-common`, `rsync`, `bluez`, etc.), configures the USB gadget overlay, creates a systemd service, and prompts for a reboot.
