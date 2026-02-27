@@ -45,6 +45,7 @@ tar xzf "$TC_TMP/tc.tar.gz" -C "$TC_TMP"
 cp "$TC_TMP/tesla-control" /usr/local/bin/tesla-control
 chmod +x /usr/local/bin/tesla-control
 rm -rf "$TC_TMP"
+echo "Installed tesla-control"
 
 if [ "$UPGRADE" = true ]; then
   systemctl restart teslausb || true
@@ -54,13 +55,13 @@ fi
 
 # First install — configure system
 echo "Installing packages..."
-apt-get update -qq
-apt-get install -y -qq exfatprogs nfs-common rsync bluez fdisk ntpsec-ntpdate
+apt-get update -qq >/dev/null
+apt-get install -y -qq exfatprogs nfs-common rsync bluez fdisk ntpsec-ntpdate >/dev/null 2>&1
 
 echo "Disabling unnecessary services..."
 systemctl disable --now apt-daily.timer apt-daily-upgrade.timer dpkg-db-backup.timer 2>/dev/null || true
 systemctl disable --now triggerhappy keyboard-setup 2>/dev/null || true
-apt-get remove -y -qq dphys-swapfile 2>/dev/null || true
+apt-get remove -y -qq dphys-swapfile >/dev/null 2>&1 || true
 
 # Configure USB gadget boot
 echo "Configuring USB gadget..."
@@ -109,16 +110,9 @@ WantedBy=multi-user.target
 SERVICE
 
 systemctl daemon-reload
-systemctl enable teslausb
+systemctl enable -q teslausb
 
-HOSTNAME=$(hostname)
 echo ""
 echo "=== Setup complete! ==="
-echo "Reboot required to enable USB gadget mode."
-echo "After reboot, open http://$HOSTNAME.local to configure."
-echo ""
-echo "Reboot now? (y/N)"
-read -r REPLY
-if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
-  reboot
-fi
+echo "Run 'sudo reboot' to enable USB gadget mode."
+echo "After reboot, open http://$(hostname).local to configure."
