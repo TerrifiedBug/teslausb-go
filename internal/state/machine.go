@@ -29,13 +29,14 @@ const (
 )
 
 type Machine struct {
-	mu           sync.RWMutex
-	state        State
-	lastArchive  time.Time
-	lastError    string
-	archiveClips int
-	archiveBytes int64
-	listeners    []func(State)
+	mu            sync.RWMutex
+	state         State
+	lastArchive   time.Time
+	lastError     string
+	archiveClips  int
+	archiveBytes  int64
+	gadgetEnabled bool
+	listeners     []func(State)
 }
 
 func New() *Machine {
@@ -93,10 +94,12 @@ func (m *Machine) Run(ctx context.Context) error {
 
 	// Enable USB gadget (non-fatal — web UI should work even without UDC)
 	if err := gadget.Enable(disk.BackingFile); err != nil {
-		log.Printf("warning: %v (web UI still available, gadget will retry when connected to vehicle)", err)
+		log.Printf("warning: %v (web UI still available, gadget will retry)", err)
 		m.mu.Lock()
 		m.lastError = err.Error()
 		m.mu.Unlock()
+	} else {
+		m.gadgetEnabled = true
 	}
 
 	m.setState(StateAway)
@@ -132,6 +135,13 @@ func (m *Machine) runAway(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Retry gadget enable if it failed (e.g. UDC wasn't available at boot)
+			if !m.gadgetEnabled {
+				if err := gadget.Enable(disk.BackingFile); err == nil {
+					m.gadgetEnabled = true
+					log.Println("USB gadget enabled (delayed)")
+				}
+			}
 			if archive.IsReachable() {
 				m.setState(StateArriving)
 				return
@@ -154,9 +164,11 @@ func (m *Machine) runArriving(ctx context.Context) {
 
 	if err := gadget.Disable(); err != nil {
 		log.Printf("disable gadget: %v", err)
+		m.gadgetEnabled = false
 		m.setState(StateAway)
 		return
 	}
+	m.gadgetEnabled = false
 
 	notify.Send(ctx, webhook.Event{Event: "usb_disconnected", Message: "USB gadget disabled for archiving"})
 
@@ -248,8 +260,13 @@ func (m *Machine) runIdle(ctx context.Context) {
 	archive.UnmountNFS()
 	disk.Unmount()
 
-	gadget.Enable(disk.BackingFile)
-	notify.Send(ctx, webhook.Event{Event: "usb_connected", Message: "USB gadget re-enabled"})
+	if err := gadget.Enable(disk.BackingFile); err != nil {
+		log.Printf("warning: gadget re-enable failed: %v", err)
+		m.gadgetEnabled = false
+	} else {
+		m.gadgetEnabled = true
+		notify.Send(ctx, webhook.Event{Event: "usb_connected", Message: "USB gadget re-enabled"})
+	}
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -259,6 +276,14 @@ func (m *Machine) runIdle(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Retry gadget if it failed
+			if !m.gadgetEnabled {
+				if err := gadget.Enable(disk.BackingFile); err == nil {
+					m.gadgetEnabled = true
+					log.Println("USB gadget enabled (delayed)")
+					notify.Send(ctx, webhook.Event{Event: "usb_connected", Message: "USB gadget re-enabled"})
+				}
+			}
 			if !archive.IsReachable() {
 				log.Println("NFS unreachable — user left home")
 				m.setState(StateAway)
