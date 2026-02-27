@@ -30,12 +30,17 @@ if [ -z "$LATEST" ]; then
 fi
 echo "Latest release: $LATEST"
 
-# Download teslausb binary (use temp file to avoid ETXTBSY on running binary)
-echo "Downloading teslausb..."
-curl -fsSL "https://github.com/$REPO/releases/download/$LATEST/teslausb-linux-$GOARCH" -o /usr/local/bin/teslausb.new
-mv /usr/local/bin/teslausb.new /usr/local/bin/teslausb
-chmod +x /usr/local/bin/teslausb
-echo "Installed teslausb $(/usr/local/bin/teslausb -version 2>/dev/null || echo "$LATEST")"
+# Check if already on latest version
+CURRENT_VERSION=$(/usr/local/bin/teslausb -version 2>/dev/null || echo "none")
+if [ "$CURRENT_VERSION" = "$LATEST" ]; then
+  echo "Already on $LATEST, skipping download"
+else
+  echo "Downloading teslausb ($CURRENT_VERSION -> $LATEST)..."
+  curl -fsSL "https://github.com/$REPO/releases/download/$LATEST/teslausb-linux-$GOARCH" -o /usr/local/bin/teslausb.new
+  mv /usr/local/bin/teslausb.new /usr/local/bin/teslausb
+  chmod +x /usr/local/bin/teslausb
+  echo "Installed teslausb $(/usr/local/bin/teslausb -version 2>/dev/null || echo "$LATEST")"
+fi
 
 # Download tesla-control + tesla-keygen (MikeBishop only publishes armv7 — runs fine on arm64)
 if [ -f /usr/local/bin/tesla-control ] && [ -f /usr/local/bin/tesla-keygen ]; then

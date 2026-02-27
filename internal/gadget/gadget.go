@@ -104,6 +104,10 @@ func Enable(backingFile string) error {
 
 	// Mass storage LUN
 	writeFile(filepath.Join(root, "functions", "mass_storage.0", "lun.0", "file"), backingFile)
+	if info, err := os.Stat(backingFile); err == nil {
+		sizeGB := info.Size() / (1024 * 1024 * 1024)
+		writeFile(filepath.Join(root, "functions", "mass_storage.0", "lun.0", "inquiry_string"), fmt.Sprintf("TeslaUSB CAM %dG", sizeGB))
+	}
 
 	// Symlink function to config
 	linkPath := filepath.Join(root, "configs", "c.1", "mass_storage.0")

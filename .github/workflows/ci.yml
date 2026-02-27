@@ -54,10 +54,19 @@ jobs:
           name: web-dist
           path: internal/web/static/
 
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Cross-compile for arm64
         run: >
           GOOS=linux GOARCH=arm64 go build
-          -ldflags "-X main.version=${{ github.sha }}"
+          -ldflags "-X main.version=${{ steps.version.outputs.version }}"
           -o teslausb-linux-arm64
           ./cmd/teslausb
 

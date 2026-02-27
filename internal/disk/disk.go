@@ -78,12 +78,14 @@ func Create() error {
 		return fmt.Errorf("mkfs.exfat: %s: %w", out, err)
 	}
 
-	// Mount and create TeslaCam directory
+	// Mount and create TeslaCam directory structure Tesla expects
 	os.MkdirAll(MountPoint, 0755)
 	if err := exec.Command("mount", partDev, MountPoint).Run(); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}
-	os.MkdirAll(filepath.Join(MountPoint, "TeslaCam"), 0755)
+	for _, dir := range []string{"TeslaCam/RecentClips", "TeslaCam/SavedClips", "TeslaCam/SentryClips"} {
+		os.MkdirAll(filepath.Join(MountPoint, dir), 0755)
+	}
 	exec.Command("umount", MountPoint).Run()
 
 	log.Printf("cam_disk.bin created and formatted (%d GB exFAT)", size/(1024*1024*1024))
@@ -110,6 +112,11 @@ func Mount() error {
 	if err := exec.Command("mount", "-o", "umask=000", partDev, MountPoint).Run(); err != nil {
 		exec.Command("losetup", "-d", loopDev).Run()
 		return fmt.Errorf("mount: %w", err)
+	}
+
+	// Ensure TeslaCam subdirectories exist (fixes existing images missing them)
+	for _, dir := range []string{"TeslaCam/RecentClips", "TeslaCam/SavedClips", "TeslaCam/SentryClips"} {
+		os.MkdirAll(filepath.Join(MountPoint, dir), 0755)
 	}
 
 	log.Println("cam image mounted at", MountPoint)
