@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,8 +41,17 @@ type Machine struct {
 	listeners     []func(State)
 }
 
+const lastArchiveFile = "/mutable/teslausb/last_archive"
+
 func New() *Machine {
-	return &Machine{state: StateBooting}
+	m := &Machine{state: StateBooting}
+	// Restore last archive timestamp
+	if data, err := os.ReadFile(lastArchiveFile); err == nil {
+		if t, err := time.Parse(time.RFC3339, strings.TrimSpace(string(data))); err == nil {
+			m.lastArchive = t
+		}
+	}
+	return m
 }
 
 func (m *Machine) State() State {
@@ -228,11 +239,13 @@ func (m *Machine) runArchiving(ctx context.Context) {
 			Message: err.Error(),
 		})
 	} else {
+		now := time.Now()
 		m.mu.Lock()
-		m.lastArchive = time.Now()
+		m.lastArchive = now
 		m.archiveClips = clips
 		m.archiveBytes = bytes
 		m.mu.Unlock()
+		os.WriteFile(lastArchiveFile, []byte(now.Format(time.RFC3339)), 0644)
 		notify.Send(ctx, webhook.Event{
 			Event:   "archive_complete",
 			Message: fmt.Sprintf("Archived %d clips in %s", clips, duration.Round(time.Second)),
