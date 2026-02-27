@@ -11,8 +11,7 @@ The original project spans roughly 14,000 lines of bash, Python, and JavaScript.
 - **BLE or webhook keep-awake** -- prevents the car from sleeping during archive via Bluetooth LE or an HTTP webhook
 - **Temperature monitoring** -- reads the Pi's CPU temperature with configurable warning and caution thresholds
 - **Real-time web dashboard** -- embedded React UI showing system state, temperatures, and archive progress
-- **File browser** -- browse and manage recorded footage from the web UI
-- **Self-updating** -- update the binary from the web UI or command line without touching config or footage
+- **Self-updating** -- update the binary via the command line without touching config or footage
 
 ## Quick Start
 

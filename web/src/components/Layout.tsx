@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 
 const tabs = [
   { id: 'dashboard', label: 'Dashboard' },
-  { id: 'files', label: 'Files' },
   { id: 'config', label: 'Config' },
   { id: 'logs', label: 'Logs' },
 ];
