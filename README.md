@@ -33,25 +33,46 @@ The installer downloads the binary and `tesla-control`, installs required system
 
 ### Tesla Vehicle Settings
 
-Recent Tesla firmware cuts power to USB ports when the car sleeps. teslausb-go needs the car to stay awake long enough to finish archiving. There are two methods:
+Recent Tesla firmware cuts power to USB ports when the car sleeps. To keep the car awake during archiving:
+
+1. **Safety → Sentry Mode**: Set to **ON**
+2. **Exclude Home**: **Unchecked**
+
+This ensures Sentry Mode is active when you arrive home, keeping the car (and USB power) awake while teslausb-go archives footage. After archiving completes, teslausb-go turns Sentry Mode off so the car can sleep and conserve battery.
 
 **Option A: BLE (Bluetooth Low Energy)**
 
 Pair the Pi directly with your car via Bluetooth. No external services needed.
 
-1. In your Tesla: **Safety → Sentry Mode** set to **ON**, **Exclude Home** set to **unchecked**
-2. In the teslausb-go web UI: enter your VIN and click **Pair**, then tap your NFC key card on the center console
-3. After archiving, teslausb-go turns Sentry Mode off automatically so the car can sleep and save battery
+1. In the teslausb-go web UI: enter your VIN and click **Pair**, then tap your NFC key card on the center console
+2. After archiving, teslausb-go sends `sentry-mode off` via BLE
 
 **Option B: Webhook**
 
-Send keep-awake commands via an external service like Home Assistant that can call the Tesla API.
+Use an external service like Home Assistant to turn Sentry Mode off after archiving.
 
 1. In the teslausb-go web UI: set keep-awake method to **Webhook** and enter your webhook URL
-2. teslausb-go sends `{"event":"archive_started"}` when archiving begins and `{"event":"archive_complete"}` when done
-3. Your automation should keep the car awake between those events (e.g. by toggling Sentry Mode via the Tesla integration)
+2. After archiving, teslausb-go sends a webhook with `{"awake_command":"stop"}`
+3. Your automation turns off Sentry Mode via the Tesla integration
 
-This method does not require Sentry Mode to be enabled in the car — your automation handles it.
+Example Home Assistant automation:
+
+```yaml
+triggers:
+  - trigger: webhook
+    webhook_id: teslausb-keep-awake
+    allowed_methods: [POST]
+    local_only: false
+actions:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.json.awake_command == 'stop' }}"
+        sequence:
+          - action: switch.turn_off
+            target:
+              entity_id: switch.your_car_sentry_mode
+```
 
 ### Configure
 
