@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -25,15 +26,23 @@ func Send(ctx context.Context, url string, event Event) error {
 
 // SendRaw sends an arbitrary JSON payload to a webhook URL.
 // Used for keep-awake commands that need to match the original teslausb format.
-func SendRaw(ctx context.Context, url string, payload any) error {
-	if url == "" {
+func SendRaw(ctx context.Context, rawURL string, payload any) error {
+	if rawURL == "" {
 		return nil
+	}
+	// Validate URL scheme to prevent SSRF with non-HTTP protocols
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid webhook URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("webhook URL must use http or https scheme, got %q", parsed.Scheme)
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, parsed.String(), bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
