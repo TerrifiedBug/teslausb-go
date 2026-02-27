@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -30,6 +31,13 @@ const (
 	StateError     State = "error"
 )
 
+type CumulativeStats struct {
+	TotalClips   int       `json:"total_clips"`
+	TotalBytes   int64     `json:"total_bytes"`
+	ArchiveCount int       `json:"archive_count"`
+	LastArchive  time.Time `json:"last_archive"`
+}
+
 type Machine struct {
 	mu            sync.RWMutex
 	state         State
@@ -37,11 +45,13 @@ type Machine struct {
 	lastError     string
 	archiveClips  int
 	archiveBytes  int64
+	cumulative    CumulativeStats
 	gadgetEnabled bool
 	listeners     []func(State)
 }
 
 const lastArchiveFile = "/mutable/teslausb/last_archive"
+const statsFile = "/mutable/teslausb/stats.json"
 
 func New() *Machine {
 	m := &Machine{state: StateBooting}
@@ -50,6 +60,10 @@ func New() *Machine {
 		if t, err := time.Parse(time.RFC3339, strings.TrimSpace(string(data))); err == nil {
 			m.lastArchive = t
 		}
+	}
+	// Restore cumulative stats
+	if data, err := os.ReadFile(statsFile); err == nil {
+		json.Unmarshal(data, &m.cumulative)
 	}
 	return m
 }
@@ -64,11 +78,14 @@ func (m *Machine) Info() map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return map[string]any{
-		"state":         string(m.state),
-		"last_archive":  m.lastArchive,
-		"last_error":    m.lastError,
-		"archive_clips": m.archiveClips,
-		"archive_bytes": m.archiveBytes,
+		"state":               string(m.state),
+		"last_archive":        m.lastArchive,
+		"last_error":          m.lastError,
+		"archive_clips":       m.archiveClips,
+		"archive_bytes":       m.archiveBytes,
+		"total_archive_clips": m.cumulative.TotalClips,
+		"total_archive_bytes": m.cumulative.TotalBytes,
+		"archive_count":       m.cumulative.ArchiveCount,
 	}
 }
 
@@ -173,7 +190,7 @@ func (m *Machine) runAway(ctx context.Context) {
 func (m *Machine) runArriving(ctx context.Context) {
 	system.SetLED("fastblink")
 
-	log.Println("NFS reachable, waiting 20s for network to stabilize...")
+	log.Println("archive server reachable, waiting 20s for network to stabilize...")
 	time.Sleep(20 * time.Second)
 
 	system.SyncTime()
@@ -201,8 +218,8 @@ func (m *Machine) runArriving(ctx context.Context) {
 
 	disk.CleanArtifacts()
 
-	if err := archive.MountNFS(); err != nil {
-		log.Printf("mount NFS: %v", err)
+	if err := archive.MountArchive(); err != nil {
+		log.Printf("mount archive: %v", err)
 		disk.Unmount()
 		gadget.Enable(disk.BackingFile)
 		m.setState(StateAway)
@@ -253,8 +270,16 @@ func (m *Machine) runArchiving(ctx context.Context) {
 		m.lastArchive = now
 		m.archiveClips = clips
 		m.archiveBytes = bytes
+		m.cumulative.TotalClips += clips
+		m.cumulative.TotalBytes += bytes
+		m.cumulative.ArchiveCount++
+		m.cumulative.LastArchive = now
+		cumSnapshot := m.cumulative
 		m.mu.Unlock()
 		os.WriteFile(lastArchiveFile, []byte(now.Format(time.RFC3339)), 0644)
+		if statsData, err := json.Marshal(cumSnapshot); err == nil {
+			os.WriteFile(statsFile, statsData, 0644)
+		}
 		notify.Send(ctx, webhook.Event{
 			Event:   "archive_complete",
 			Message: fmt.Sprintf("Archived %d clips in %s", clips, duration.Round(time.Second)),
@@ -276,7 +301,7 @@ func (m *Machine) runIdle(ctx context.Context) {
 	cfg := config.Get()
 	m.sendKeepAwake(ctx, cfg, "stop")
 
-	archive.UnmountNFS()
+	archive.UnmountArchive()
 	disk.Unmount()
 
 	if err := gadget.Enable(disk.BackingFile); err != nil {
@@ -304,7 +329,7 @@ func (m *Machine) runIdle(ctx context.Context) {
 				}
 			}
 			if !archive.IsReachable() {
-				log.Println("NFS unreachable — user left home")
+				log.Println("archive server unreachable — user left home")
 				m.setState(StateAway)
 				system.SetLED("slowblink")
 				return

@@ -8,22 +8,28 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/teslausb-go/teslausb/internal/config"
 	"github.com/teslausb-go/teslausb/internal/disk"
 )
 
 const minReserveBytes = 2 * 1024 * 1024 * 1024 // 2GB minimum reserve
 
 func reserveBytes() int64 {
+	pct := 10
+	if cfg := config.Get(); cfg != nil && cfg.Archive.ReservePercent > 0 {
+		pct = cfg.Archive.ReservePercent
+	}
+
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(disk.MountPoint, &stat); err != nil {
 		return minReserveBytes
 	}
 	total := int64(stat.Blocks) * int64(stat.Bsize)
-	tenPercent := total / 10
-	if tenPercent < minReserveBytes {
+	reserve := total * int64(pct) / 100
+	if reserve < minReserveBytes {
 		return minReserveBytes
 	}
-	return tenPercent
+	return reserve
 }
 
 type fileEntry struct {

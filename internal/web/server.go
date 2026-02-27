@@ -19,6 +19,7 @@ import (
 	"github.com/teslausb-go/teslausb/internal/disk"
 	"github.com/teslausb-go/teslausb/internal/monitor"
 	"github.com/teslausb-go/teslausb/internal/state"
+	"github.com/teslausb-go/teslausb/internal/update"
 )
 
 type Server struct {
@@ -53,10 +54,13 @@ func (s *Server) Start(addr string) error {
 	mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	mux.HandleFunc("POST /api/config", s.handleSaveConfig)
 	mux.HandleFunc("POST /api/nfs/test", s.handleTestNFS)
+	mux.HandleFunc("POST /api/cifs/test", s.handleTestCIFS)
 	mux.HandleFunc("POST /api/archive/trigger", s.handleTriggerArchive)
 	mux.HandleFunc("POST /api/ble/pair", s.handleBLEPair)
 	mux.HandleFunc("GET /api/ble/status", s.handleBLEStatus)
 	mux.HandleFunc("GET /api/logs", s.handleLogs)
+	mux.HandleFunc("GET /api/update/check", s.handleUpdateCheck)
+	mux.HandleFunc("POST /api/update/apply", s.handleUpdateApply)
 	mux.HandleFunc("/api/ws", s.hub.HandleWS)
 
 	// Static files (React build)
@@ -86,6 +90,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	info := s.machine.Info()
 	info["version"] = s.version
 	info["temperature"] = monitor.GetTemp()
+
+	// Network info
+	net := monitor.GetNetworkInfo()
+	info["wifi_ssid"] = net.SSID
+	info["wifi_signal_dbm"] = net.SignalDBM
+	info["wifi_ip"] = net.IP
 
 	// Disk usage
 	var stat syscall.Statfs_t
@@ -226,6 +236,46 @@ func (s *Server) handleTestNFS(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, map[string]any{"ok": true, "message": fmt.Sprintf("Successfully mounted %s", source)})
 }
 
+func (s *Server) handleTestCIFS(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Server   string `json:"server"`
+		Share    string `json:"share"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	if req.Server == "" || req.Share == "" {
+		http.Error(w, "server and share required", 400)
+		return
+	}
+
+	// Test TCP connectivity to SMB port
+	conn, err := net.DialTimeout("tcp", req.Server+":445", 5*time.Second)
+	if err != nil {
+		jsonResponse(w, map[string]any{"ok": false, "error": fmt.Sprintf("Cannot reach %s:445 — %v", req.Server, err)})
+		return
+	}
+	conn.Close()
+
+	// Try a temporary mount
+	testDir := "/tmp/cifs-test"
+	os.MkdirAll(testDir, 0755)
+	defer func() {
+		exec.Command("umount", "-f", "-l", testDir).Run()
+		os.Remove(testDir)
+	}()
+
+	source := fmt.Sprintf("//%s/%s", req.Server, req.Share)
+	opts := fmt.Sprintf("username=%s,password=%s,vers=3.0", req.Username, req.Password)
+	out, err := exec.Command("mount", "-t", "cifs", source, testDir, "-o", opts).CombinedOutput()
+	if err != nil {
+		jsonResponse(w, map[string]any{"ok": false, "error": fmt.Sprintf("Mount failed: %s", strings.TrimSpace(string(out)))})
+		return
+	}
+
+	jsonResponse(w, map[string]any{"ok": true, "message": fmt.Sprintf("Successfully mounted %s", source)})
+}
+
 func (s *Server) handleTriggerArchive(w http.ResponseWriter, r *http.Request) {
 	if s.machine.TriggerArchive() {
 		jsonResponse(w, map[string]string{"status": "triggered"})
@@ -264,4 +314,32 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	jsonResponse(w, lines)
+}
+
+func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	release, err := update.CheckForUpdate(s.version)
+	if err != nil {
+		jsonResponse(w, map[string]any{"available": false, "error": err.Error()})
+		return
+	}
+	if release == nil {
+		jsonResponse(w, map[string]any{"available": false})
+		return
+	}
+	jsonResponse(w, map[string]any{
+		"available": true,
+		"version":   release.TagName,
+		"notes":     release.Body,
+	})
+}
+
+func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, map[string]string{"status": "updating"})
+
+	// Apply in background — service will restart
+	go func() {
+		if err := update.Apply(s.version); err != nil {
+			log.Printf("update error: %v", err)
+		}
+	}()
 }

@@ -1,8 +1,19 @@
 # WiFi is configured via Raspberry Pi Imager, not here.
 
+archive:
+  recent_clips: false
+  reserve_percent: 10   # % of disk to keep free (min 2GB)
+  method: "nfs"          # "nfs" or "cifs"
+
 nfs:
   server: "192.168.1.100"
   share: "/volume1/TeslaCam"
+
+cifs:
+  server: ""
+  share: ""
+  username: ""
+  password: ""
 
 keep_awake:
   method: "ble"       # "ble" or "webhook"

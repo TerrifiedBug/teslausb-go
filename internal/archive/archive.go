@@ -16,10 +16,20 @@ import (
 
 const ArchiveMount = "/mnt/archive"
 
-// IsReachable checks if the NFS server is reachable via TCP port 2049.
+// IsReachable checks if the archive server is reachable.
 func IsReachable() bool {
 	cfg := config.Get()
-	if cfg == nil || cfg.NFS.Server == "" {
+	if cfg == nil {
+		return false
+	}
+	if cfg.Archive.Method == "cifs" {
+		return isCIFSReachable(cfg)
+	}
+	return isNFSReachable(cfg)
+}
+
+func isNFSReachable(cfg *config.Config) bool {
+	if cfg.NFS.Server == "" {
 		return false
 	}
 	conn, err := net.DialTimeout("tcp", cfg.NFS.Server+":2049", 5*time.Second)
@@ -28,6 +38,56 @@ func IsReachable() bool {
 	}
 	conn.Close()
 	return true
+}
+
+func isCIFSReachable(cfg *config.Config) bool {
+	if cfg.CIFS.Server == "" {
+		return false
+	}
+	conn, err := net.DialTimeout("tcp", cfg.CIFS.Server+":445", 5*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+// MountArchive mounts the archive share based on configured method.
+func MountArchive() error {
+	cfg := config.Get()
+	if cfg != nil && cfg.Archive.Method == "cifs" {
+		return MountCIFS()
+	}
+	return MountNFS()
+}
+
+// UnmountArchive unmounts whichever archive share is mounted.
+func UnmountArchive() {
+	UnmountNFS()
+}
+
+// MountCIFS mounts the configured CIFS/SMB share with auto-negotiation.
+func MountCIFS() error {
+	cfg := config.Get()
+	if cfg == nil {
+		return fmt.Errorf("no config")
+	}
+	os.MkdirAll(ArchiveMount, 0755)
+	source := fmt.Sprintf("//%s/%s", cfg.CIFS.Server, cfg.CIFS.Share)
+
+	// Build options
+	opts := fmt.Sprintf("username=%s,password=%s,iocharset=utf8,file_mode=0777,dir_mode=0777",
+		cfg.CIFS.Username, cfg.CIFS.Password)
+
+	// Try SMB versions in order: 3.0, 2.1, 2.0
+	for _, ver := range []string{"3.0", "2.1", "2.0"} {
+		verOpts := opts + ",vers=" + ver
+		if err := exec.Command("mount", "-t", "cifs", source, ArchiveMount, "-o", verOpts).Run(); err == nil {
+			log.Printf("CIFS mounted: %s (SMB %s)", source, ver)
+			return nil
+		}
+	}
+	return fmt.Errorf("mount CIFS %s: all SMB versions failed", source)
 }
 
 // MountNFS mounts the configured NFS share.
@@ -114,9 +174,17 @@ func ArchiveClips(ctx context.Context) (int, int64, error) {
 			return totalClips, totalBytes, ctx.Err()
 		}
 
-		// Count archived items on destination
-		dstEntries, _ := filepath.Glob(filepath.Join(dst, "*"))
-		totalClips += len(dstEntries)
+		// Count archived items and bytes on destination
+		dstEntries, _ := os.ReadDir(dst)
+		for _, e := range dstEntries {
+			if e.IsDir() {
+				continue
+			}
+			totalClips++
+			if info, err := e.Info(); err == nil {
+				totalBytes += info.Size()
+			}
+		}
 	}
 
 	// Clean empty directories in source
