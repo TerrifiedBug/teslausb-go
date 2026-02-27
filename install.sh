@@ -71,6 +71,8 @@ apt-get remove -y -qq dphys-swapfile >/dev/null 2>&1 || true
 
 # Configure USB gadget boot
 echo "Configuring USB gadget..."
+# Remove any dwc2 overlay with host mode (breaks gadget)
+sed -i '/dtoverlay=dwc2,dr_mode=host/d' /boot/firmware/config.txt
 if ! grep -q "dtoverlay=dwc2" /boot/firmware/config.txt; then
   echo "dtoverlay=dwc2" >> /boot/firmware/config.txt
 fi
