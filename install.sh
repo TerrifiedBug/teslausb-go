@@ -76,12 +76,18 @@ apt-get remove -y -qq dphys-swapfile >/dev/null 2>&1 || true
 
 # Configure USB gadget boot
 echo "Configuring USB gadget..."
-# Remove any dwc2 overlay with host mode (breaks gadget)
+# Remove any dwc2 overlay with host mode (breaks gadget mode)
 sed -i '/dtoverlay=dwc2,dr_mode=host/d' /boot/firmware/config.txt
-if ! grep -q "dtoverlay=dwc2" /boot/firmware/config.txt; then
-  echo "dtoverlay=dwc2" >> /boot/firmware/config.txt
+# Add dtoverlay=dwc2 under [all] section so it applies to all Pi models
+# (config.txt has [cm4], [cm5] sections that only apply to Compute Modules)
+if ! grep -q "^dtoverlay=dwc2$" /boot/firmware/config.txt; then
+  if grep -q "^\[all\]" /boot/firmware/config.txt; then
+    sed -i '/^\[all\]/a dtoverlay=dwc2' /boot/firmware/config.txt
+  else
+    echo -e "\n[all]\ndtoverlay=dwc2" >> /boot/firmware/config.txt
+  fi
 fi
-if ! grep -q "modules-load=dwc2,g_ether" /boot/firmware/cmdline.txt; then
+if ! grep -q "modules-load=dwc2" /boot/firmware/cmdline.txt; then
   sed -i 's/$/ modules-load=dwc2,g_ether/' /boot/firmware/cmdline.txt
 fi
 
