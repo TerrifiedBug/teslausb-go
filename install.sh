@@ -29,8 +29,11 @@ chmod +x /usr/local/bin/teslausb
 
 # Download tesla-control (MikeBishop only publishes armv7 — runs fine on arm64)
 echo "Downloading tesla-control..."
+TMPDIR=$(mktemp -d)
 curl -sSL "https://github.com/$MIKE_REPO/releases/latest/download/vehicle-command-binaries-linux-$TCARCH.tar.gz" \
-  | tar xzf - -C /usr/local/bin/ tesla-control
+  | tar xzf - -C "$TMPDIR"
+cp "$TMPDIR/tesla-control" /usr/local/bin/tesla-control
+rm -rf "$TMPDIR"
 chmod +x /usr/local/bin/tesla-control
 
 if [ "$UPGRADE" = true ]; then
