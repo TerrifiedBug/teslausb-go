@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const gadgetName = "teslausb"
@@ -109,12 +110,23 @@ func Enable(backingFile string) error {
 	os.Remove(linkPath)
 	os.Symlink(filepath.Join(root, "functions", "mass_storage.0"), linkPath)
 
-	// Bind to UDC
-	entries, err := os.ReadDir("/sys/class/udc")
-	if err != nil || len(entries) == 0 {
-		return fmt.Errorf("no UDC found")
+	// Bind to UDC (wait up to 30s for it to appear after boot)
+	var udcName string
+	for i := 0; i < 15; i++ {
+		entries, err := os.ReadDir("/sys/class/udc")
+		if err == nil && len(entries) > 0 {
+			udcName = entries[0].Name()
+			break
+		}
+		if i == 0 {
+			log.Println("waiting for UDC...")
+		}
+		time.Sleep(2 * time.Second)
 	}
-	writeFile(filepath.Join(root, "UDC"), entries[0].Name())
+	if udcName == "" {
+		return fmt.Errorf("no UDC found after 30s")
+	}
+	writeFile(filepath.Join(root, "UDC"), udcName)
 
 	log.Printf("USB gadget enabled with %s", backingFile)
 	return nil
