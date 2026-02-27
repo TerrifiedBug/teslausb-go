@@ -131,11 +131,9 @@ export function Config() {
             {bleStatus && (
               <div className="mt-1 text-xs">
                 {bleStatus.keys_exist ? (
-                  <span className={bleStatus.paired ? 'text-green-400' : 'text-yellow-400'}>
-                    {bleStatus.paired ? 'Paired' : 'Keys generated — not yet paired'}
-                  </span>
+                  <span className="text-green-400">Paired (keys stored)</span>
                 ) : (
-                  <span className="text-gray-500">No BLE keys — click Pair to set up</span>
+                  <span className="text-gray-500">Not paired — click Pair to set up</span>
                 )}
               </div>
             )}

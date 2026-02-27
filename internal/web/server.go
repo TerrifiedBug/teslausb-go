@@ -247,15 +247,9 @@ func (s *Server) handleBLEPair(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleBLEStatus(w http.ResponseWriter, r *http.Request) {
-	cfg := config.Get()
-	result := map[string]any{
+	jsonResponse(w, map[string]any{
 		"keys_exist": ble.KeysExist(),
-		"paired":     false,
-	}
-	if cfg != nil && cfg.KeepAwake.VIN != "" {
-		result["paired"] = ble.IsPaired(cfg.KeepAwake.VIN)
-	}
-	jsonResponse(w, result)
+	})
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
