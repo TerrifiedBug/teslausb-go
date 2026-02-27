@@ -113,7 +113,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	fullPath := filepath.Join(disk.MountPoint, reqPath)
 	entries, err := os.ReadDir(fullPath)
 	if err != nil {
-		jsonResponse(w, []struct{}{})
+		jsonResponse(w, []any{})
 		return
 	}
 
@@ -123,7 +123,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 		Size  int64  `json:"size"`
 		Path  string `json:"path"`
 	}
-	var files []fileInfo
+	files := make([]fileInfo, 0)
 	for _, e := range entries {
 		info, _ := e.Info()
 		size := int64(0)
