@@ -65,34 +65,36 @@ func ArchiveClips(ctx context.Context) (int, int64, error) {
 			continue
 		}
 
+		// Check if there are any files to archive
+		entries, _ := os.ReadDir(src)
+		if len(entries) == 0 {
+			continue
+		}
+
 		dst := filepath.Join(ArchiveMount, dir) + "/"
 		os.MkdirAll(dst, 0755)
 
-		// Build rsync command
+		log.Printf("archiving %s (%d items)", dir, len(entries))
+
+		// Build rsync command — use direct src/dst (no -R with absolute paths)
 		args := []string{
-			"-avhRL",
+			"-avhL",
 			"--no-o", "--no-g", // NFS root-squash workaround
 			"--remove-source-files",
 			"--no-perms",
 			"--omit-dir-times",
-			"--temp-dir=.teslausbtmp",
 			src + "/",
-			ArchiveMount + "/",
+			dst,
 		}
 
 		cmd := exec.CommandContext(ctx, "rsync", args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
-		// Run rsync with connection monitoring
 		errCh := make(chan error, 1)
 		go func() {
 			errCh <- cmd.Run()
 		}()
-
-		// Monitor NFS reachability
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
 
 		select {
 		case err := <-errCh:
@@ -109,9 +111,9 @@ func ArchiveClips(ctx context.Context) (int, int64, error) {
 			return totalClips, totalBytes, ctx.Err()
 		}
 
-		// Count transferred files
-		entries, _ := filepath.Glob(filepath.Join(dst, "*"))
-		totalClips += len(entries)
+		// Count archived items on destination
+		dstEntries, _ := filepath.Glob(filepath.Join(dst, "*"))
+		totalClips += len(dstEntries)
 	}
 
 	// Clean empty directories in source
