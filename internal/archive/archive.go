@@ -52,10 +52,13 @@ func UnmountNFS() {
 	log.Println("NFS unmounted")
 }
 
-// ArchiveClips copies SavedClips and SentryClips to the NFS share via rsync.
+// ArchiveClips copies SavedClips and SentryClips (and optionally RecentClips) to the NFS share via rsync.
 // Returns clip count and bytes transferred.
 func ArchiveClips(ctx context.Context) (int, int64, error) {
 	clipDirs := []string{"TeslaCam/SavedClips", "TeslaCam/SentryClips"}
+	if cfg := config.Get(); cfg != nil && cfg.Archive.RecentClips {
+		clipDirs = append(clipDirs, "TeslaCam/RecentClips")
+	}
 	totalClips := 0
 	totalBytes := int64(0)
 

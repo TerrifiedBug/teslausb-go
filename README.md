@@ -67,7 +67,7 @@ actions:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ trigger.json.data.awake_command == 'stop' }}"
+            value_template: "{{ trigger.json.awake_command == 'stop' }}"
         sequence:
           - action: switch.turn_off
             target:

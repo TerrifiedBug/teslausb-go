@@ -328,10 +328,8 @@ func (m *Machine) sendKeepAwake(ctx context.Context, cfg *config.Config, command
 		}
 	case "webhook":
 		if cfg.KeepAwake.WebhookURL != "" {
-			webhook.Send(ctx, cfg.KeepAwake.WebhookURL, webhook.Event{
-				Event: "keep_awake",
-				Data:  map[string]any{"awake_command": command},
-			})
+			// Send flat {"awake_command":"..."} matching original teslausb format
+			webhook.SendRaw(ctx, cfg.KeepAwake.WebhookURL, map[string]string{"awake_command": command})
 		}
 	}
 }

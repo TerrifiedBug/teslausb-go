@@ -28,6 +28,7 @@ export interface FileEntry {
 
 export interface Config {
   nfs: { server: string; share: string };
+  archive: { recent_clips: boolean };
   keep_awake: { method: string; vin: string; webhook_url: string };
   notifications: { webhook_url: string };
   temperature: { warning_celsius: number; caution_celsius: number };

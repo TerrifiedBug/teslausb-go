@@ -100,6 +100,20 @@ export function Config() {
       </section>
 
       <section className="bg-gray-900 rounded-lg p-4 border border-gray-800 space-y-3">
+        <h2 className="text-sm font-medium text-gray-300">Archive</h2>
+        <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={config.archive?.recent_clips ?? false}
+            onChange={e => update('archive', 'recent_clips', e.target.checked as any)}
+            className="rounded border-gray-700 bg-gray-800"
+          />
+          Archive RecentClips
+          <span className="text-xs text-gray-500">(rolling dashcam footage — uses more NFS storage)</span>
+        </label>
+      </section>
+
+      <section className="bg-gray-900 rounded-lg p-4 border border-gray-800 space-y-3">
         <h2 className="text-sm font-medium text-gray-300">Keep Awake</h2>
         <div className="flex gap-2">
           {['ble', 'webhook'].map(method => (
@@ -125,7 +139,7 @@ export function Config() {
                 placeholder="5YJ3E1EA1NF000000"
               />
               <button onClick={pairBLE} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm">
-                Pair
+                {bleStatus?.keys_exist ? 'Re-pair' : 'Pair'}
               </button>
             </div>
             {bleStatus && (

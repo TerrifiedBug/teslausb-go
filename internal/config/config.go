@@ -9,9 +9,14 @@ import (
 
 type Config struct {
 	NFS           NFS           `yaml:"nfs" json:"nfs"`
+	Archive       Archive       `yaml:"archive" json:"archive"`
 	KeepAwake     KeepAwake     `yaml:"keep_awake" json:"keep_awake"`
 	Notifications Notifications `yaml:"notifications" json:"notifications"`
 	Temperature   Temperature   `yaml:"temperature" json:"temperature"`
+}
+
+type Archive struct {
+	RecentClips bool `yaml:"recent_clips" json:"recent_clips"`
 }
 
 type NFS struct {
