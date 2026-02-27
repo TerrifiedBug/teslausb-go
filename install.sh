@@ -9,8 +9,8 @@ echo "=== teslausb-go installer ==="
 # Detect architecture
 ARCH=$(uname -m)
 case "$ARCH" in
-  aarch64) GOARCH="arm64" ;;
-  armv7l)  GOARCH="arm" ;;
+  aarch64) GOARCH="arm64"; TCARCH="armv7" ;;
+  armv7l)  GOARCH="arm";   TCARCH="armv7" ;;
   *)       echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
@@ -27,10 +27,11 @@ LATEST=$(curl -sSL "https://api.github.com/repos/$REPO/releases/latest" | grep t
 curl -sSL "https://github.com/$REPO/releases/download/$LATEST/teslausb-linux-$GOARCH" -o /usr/local/bin/teslausb
 chmod +x /usr/local/bin/teslausb
 
-# Download tesla-control
+# Download tesla-control (MikeBishop only publishes armv7 — runs fine on arm64)
 echo "Downloading tesla-control..."
-curl -sSL "https://github.com/$MIKE_REPO/releases/latest/download/vehicle-command-binaries-linux-$GOARCH.tar.gz" \
-  | tar xzf - -C /usr/local/bin/ --strip-components=1
+curl -sSL "https://github.com/$MIKE_REPO/releases/latest/download/vehicle-command-binaries-linux-$TCARCH.tar.gz" \
+  | tar xzf - -C /usr/local/bin/ tesla-control
+chmod +x /usr/local/bin/tesla-control
 
 if [ "$UPGRADE" = true ]; then
   echo "Restarting service..."
