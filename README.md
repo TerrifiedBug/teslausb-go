@@ -33,12 +33,25 @@ The installer downloads the binary and `tesla-control`, installs required system
 
 ### Tesla Vehicle Settings
 
-For BLE keep-awake to work correctly, configure your Tesla:
+Recent Tesla firmware cuts power to USB ports when the car sleeps. teslausb-go needs the car to stay awake long enough to finish archiving. There are two methods:
 
-1. **Safety → Sentry Mode**: Set to **ON**
-2. **Exclude Home**: **Unchecked** (Sentry Mode must remain active at home so the car stays awake during archiving)
+**Option A: BLE (Bluetooth Low Energy)**
 
-After archiving completes, teslausb-go automatically turns Sentry Mode off so the car can sleep and conserve battery.
+Pair the Pi directly with your car via Bluetooth. No external services needed.
+
+1. In your Tesla: **Safety → Sentry Mode** set to **ON**, **Exclude Home** set to **unchecked**
+2. In the teslausb-go web UI: enter your VIN and click **Pair**, then tap your NFC key card on the center console
+3. After archiving, teslausb-go turns Sentry Mode off automatically so the car can sleep and save battery
+
+**Option B: Webhook**
+
+Send keep-awake commands via an external service like Home Assistant that can call the Tesla API.
+
+1. In the teslausb-go web UI: set keep-awake method to **Webhook** and enter your webhook URL
+2. teslausb-go sends `{"event":"archive_started"}` when archiving begins and `{"event":"archive_complete"}` when done
+3. Your automation should keep the car awake between those events (e.g. by toggling Sentry Mode via the Tesla integration)
+
+This method does not require Sentry Mode to be enabled in the car — your automation handles it.
 
 ### Configure
 
