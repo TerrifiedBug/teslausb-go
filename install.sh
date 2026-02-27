@@ -11,9 +11,8 @@ ARCH=$(uname -m)
 case "$ARCH" in
   aarch64) GOARCH="arm64"; TCARCH="armv7" ;;
   armv7l)  GOARCH="arm";   TCARCH="armv7" ;;
-  *)       echo "ERROR: Unsupported architecture: $ARCH"; exit 1 ;;
+  *)       echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
-echo "Architecture: $ARCH (Go: $GOARCH, tesla-control: $TCARCH)"
 
 # Check for existing install
 UPGRADE=false
@@ -23,37 +22,28 @@ if [ -f /usr/local/bin/teslausb ]; then
 fi
 
 # Download latest release tag
-echo "Fetching latest release..."
-RELEASE_URL="https://api.github.com/repos/$REPO/releases/latest"
-LATEST=$(curl -fsSL "$RELEASE_URL" | grep tag_name | cut -d'"' -f4)
+LATEST=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep tag_name | cut -d'"' -f4)
 if [ -z "$LATEST" ]; then
-  echo "ERROR: Could not determine latest release from $RELEASE_URL"
+  echo "ERROR: Could not determine latest release"
   exit 1
 fi
-echo "Latest release: $LATEST"
 
 # Download teslausb binary
-BINARY_URL="https://github.com/$REPO/releases/download/$LATEST/teslausb-linux-$GOARCH"
-echo "Downloading teslausb from $BINARY_URL..."
-curl -fsSL "$BINARY_URL" -o /usr/local/bin/teslausb
+echo "Downloading teslausb $LATEST..."
+curl -fsSL "https://github.com/$REPO/releases/download/$LATEST/teslausb-linux-$GOARCH" -o /usr/local/bin/teslausb
 chmod +x /usr/local/bin/teslausb
-echo "teslausb binary installed ($(/usr/local/bin/teslausb -version 2>/dev/null || echo 'unknown version'))"
 
 # Download tesla-control (MikeBishop only publishes armv7 — runs fine on arm64)
-TC_URL="https://github.com/$MIKE_REPO/releases/latest/download/vehicle-command-binaries-linux-$TCARCH.tar.gz"
-echo "Downloading tesla-control from $TC_URL..."
+echo "Downloading tesla-control..."
 TC_TMP=$(mktemp -d)
-curl -fsSL "$TC_URL" -o "$TC_TMP/tc.tar.gz"
-echo "Downloaded $(wc -c < "$TC_TMP/tc.tar.gz") bytes"
+curl -fsSL "https://github.com/$MIKE_REPO/releases/latest/download/vehicle-command-binaries-linux-$TCARCH.tar.gz" \
+  -o "$TC_TMP/tc.tar.gz"
 tar xzf "$TC_TMP/tc.tar.gz" -C "$TC_TMP"
-ls -la "$TC_TMP/"
 cp "$TC_TMP/tesla-control" /usr/local/bin/tesla-control
 chmod +x /usr/local/bin/tesla-control
 rm -rf "$TC_TMP"
-echo "tesla-control installed"
 
 if [ "$UPGRADE" = true ]; then
-  echo "Restarting service..."
   systemctl restart teslausb || true
   echo "Upgrade complete!"
   exit 0
@@ -62,7 +52,7 @@ fi
 # First install — configure system
 echo "Installing packages..."
 apt-get update -qq
-apt-get install -y -qq exfatprogs nfs-common rsync bluez fdisk sntp
+apt-get install -y -qq exfatprogs nfs-common rsync bluez fdisk ntpsec-ntpdate
 
 echo "Disabling unnecessary services..."
 systemctl disable --now apt-daily.timer apt-daily-upgrade.timer dpkg-db-backup.timer 2>/dev/null || true
@@ -121,7 +111,7 @@ systemctl enable teslausb
 HOSTNAME=$(hostname)
 echo ""
 echo "=== Setup complete! ==="
-echo "A reboot is required to enable USB gadget mode."
+echo "Reboot required to enable USB gadget mode."
 echo "After reboot, open http://$HOSTNAME.local to configure."
 echo ""
 echo "Reboot now? (y/N)"

@@ -8,9 +8,13 @@ import (
 
 func SyncTime() error {
 	for i := 0; i < 5; i++ {
-		for _, cmd := range []string{"sntp", "ntpdig"} {
+		for _, cmd := range []string{"sntp", "ntpdig", "ntpdate"} {
 			if path, err := exec.LookPath(cmd); err == nil {
-				out, err := exec.Command(path, "-S", "time.google.com").CombinedOutput()
+				args := []string{"time.google.com"}
+				if cmd != "ntpdate" {
+					args = []string{"-S", "time.google.com"}
+				}
+				out, err := exec.Command(path, args...).CombinedOutput()
 				if err == nil {
 					log.Printf("time synced via %s: %s", cmd, strings.TrimSpace(string(out)))
 					return nil
