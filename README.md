@@ -32,6 +32,15 @@ curl -sSL https://raw.githubusercontent.com/TerrifiedBug/teslausb-go/main/instal
 
 The installer downloads the binary and `tesla-control`, installs required system packages (`exfatprogs`, `nfs-common`, `rsync`, `bluez`, etc.), configures the USB gadget overlay, creates a systemd service, and prompts for a reboot.
 
+### Tesla Vehicle Settings
+
+For BLE keep-awake to work correctly, configure your Tesla:
+
+1. **Safety → Sentry Mode**: Set to **ON**
+2. **Exclude Home**: **Unchecked** (Sentry Mode must remain active at home so the car stays awake during archiving)
+
+After archiving completes, teslausb-go automatically turns Sentry Mode off so the car can sleep and conserve battery.
+
 ### Configure
 
 After reboot, open `http://teslausb.local` in a browser and fill in your NFS server, share path, and keep-awake settings.
