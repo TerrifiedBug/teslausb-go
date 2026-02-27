@@ -143,6 +143,10 @@ systemctl enable -q teslausb
 # Read-only root filesystem (protect SD card from power-loss corruption)
 echo "Configuring read-only root filesystem..."
 
+# Backup boot config files before modifying
+cp -n /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak
+cp -n /etc/fstab /etc/fstab.bak
+
 # Add ro, fastboot, noswap to kernel cmdline if not present
 if ! grep -q '\bro\b' /boot/firmware/cmdline.txt; then
   sed -i 's/$/ fastboot noswap ro/' /boot/firmware/cmdline.txt

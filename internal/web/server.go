@@ -264,7 +264,10 @@ func (s *Server) handleTestCIFS(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	source := fmt.Sprintf("//%s/%s", req.Server, req.Share)
-	opts := fmt.Sprintf("username=%s,password=%s,vers=3.0", req.Username, req.Password)
+	credFile := "/tmp/.cifs-test-credentials"
+	os.WriteFile(credFile, []byte(fmt.Sprintf("username=%s\npassword=%s\n", req.Username, req.Password)), 0600)
+	defer os.Remove(credFile)
+	opts := fmt.Sprintf("credentials=%s,vers=3.0", credFile)
 	out, err := exec.Command("mount", "-t", "cifs", source, testDir, "-o", opts).CombinedOutput()
 	if err != nil {
 		jsonResponse(w, map[string]any{"ok": false, "error": fmt.Sprintf("Mount failed: %s", strings.TrimSpace(string(out)))})

@@ -65,6 +65,14 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+	// Clamp reserve percent to valid range
+	if cfg.Archive.ReservePercent < 1 || cfg.Archive.ReservePercent > 50 {
+		cfg.Archive.ReservePercent = 10
+	}
+	// Default archive method to NFS
+	if cfg.Archive.Method != "nfs" && cfg.Archive.Method != "cifs" {
+		cfg.Archive.Method = "nfs"
+	}
 	mu.Lock()
 	current = &cfg
 	mu.Unlock()

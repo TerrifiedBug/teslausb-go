@@ -278,7 +278,9 @@ func (m *Machine) runArchiving(ctx context.Context) {
 		m.mu.Unlock()
 		os.WriteFile(lastArchiveFile, []byte(now.Format(time.RFC3339)), 0644)
 		if statsData, err := json.Marshal(cumSnapshot); err == nil {
-			os.WriteFile(statsFile, statsData, 0644)
+			if err := os.WriteFile(statsFile, statsData, 0644); err != nil {
+				log.Printf("save stats: %v", err)
+			}
 		}
 		notify.Send(ctx, webhook.Event{
 			Event:   "archive_complete",

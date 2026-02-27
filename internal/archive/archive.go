@@ -55,7 +55,10 @@ func UnmountArchive() {
 	log.Println("archive unmounted")
 }
 
+const cifsCredFile = "/mutable/teslausb/.cifs-credentials"
+
 // MountCIFS mounts the configured CIFS/SMB share with auto-negotiation.
+// Uses a credentials file so passwords aren't visible in ps output.
 func MountCIFS() error {
 	cfg := config.Get()
 	if cfg == nil {
@@ -64,9 +67,14 @@ func MountCIFS() error {
 	os.MkdirAll(ArchiveMount, 0755)
 	source := fmt.Sprintf("//%s/%s", cfg.CIFS.Server, cfg.CIFS.Share)
 
-	// Build options
-	opts := fmt.Sprintf("username=%s,password=%s,iocharset=utf8,file_mode=0777,dir_mode=0777",
-		cfg.CIFS.Username, cfg.CIFS.Password)
+	// Write credentials to a file (mode 0600) to keep passwords out of ps output
+	credContent := fmt.Sprintf("username=%s\npassword=%s\n", cfg.CIFS.Username, cfg.CIFS.Password)
+	if err := os.WriteFile(cifsCredFile, []byte(credContent), 0600); err != nil {
+		return fmt.Errorf("write CIFS credentials: %w", err)
+	}
+	defer os.Remove(cifsCredFile)
+
+	opts := fmt.Sprintf("credentials=%s,iocharset=utf8,file_mode=0777,dir_mode=0777", cifsCredFile)
 
 	// Try SMB versions in order: 3.0, 2.1, 2.0
 	for _, ver := range []string{"3.0", "2.1", "2.0"} {
