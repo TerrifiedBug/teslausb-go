@@ -37,15 +37,19 @@ chmod +x /usr/local/bin/teslausb
 echo "Installed teslausb $(/usr/local/bin/teslausb -version 2>/dev/null || echo "$LATEST")"
 
 # Download tesla-control (MikeBishop only publishes armv7 — runs fine on arm64)
-echo "Downloading tesla-control..."
-TC_TMP=$(mktemp -d)
-curl -fsSL "https://github.com/$MIKE_REPO/releases/latest/download/vehicle-command-binaries-linux-$TCARCH.tar.gz" \
-  -o "$TC_TMP/tc.tar.gz"
-tar xzf "$TC_TMP/tc.tar.gz" -C "$TC_TMP"
-cp "$TC_TMP/tesla-control" /usr/local/bin/tesla-control
-chmod +x /usr/local/bin/tesla-control
-rm -rf "$TC_TMP"
-echo "Installed tesla-control"
+if [ -f /usr/local/bin/tesla-control ]; then
+  echo "tesla-control already installed, skipping"
+else
+  echo "Downloading tesla-control..."
+  TC_TMP=$(mktemp -d)
+  curl -fsSL "https://github.com/$MIKE_REPO/releases/latest/download/vehicle-command-binaries-linux-$TCARCH.tar.gz" \
+    -o "$TC_TMP/tc.tar.gz"
+  tar xzf "$TC_TMP/tc.tar.gz" -C "$TC_TMP"
+  cp "$TC_TMP/tesla-control" /usr/local/bin/tesla-control
+  chmod +x /usr/local/bin/tesla-control
+  rm -rf "$TC_TMP"
+  echo "Installed tesla-control"
+fi
 
 if [ "$UPGRADE" = true ]; then
   systemctl restart teslausb || true
