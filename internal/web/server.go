@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -108,7 +109,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	fullPath := filepath.Join(disk.MountPoint, reqPath)
 	entries, err := os.ReadDir(fullPath)
 	if err != nil {
-		http.Error(w, err.Error(), 404)
+		jsonResponse(w, []struct{}{})
 		return
 	}
 
@@ -217,14 +218,11 @@ func (s *Server) handleBLEStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
-	data, err := os.ReadFile("/mutable/logs/teslausb.log")
+	out, err := exec.Command("journalctl", "-u", "teslausb", "-n", "100", "--no-pager", "-o", "short-iso").Output()
 	if err != nil {
 		jsonResponse(w, []string{})
 		return
 	}
-	lines := strings.Split(string(data), "\n")
-	if len(lines) > 100 {
-		lines = lines[len(lines)-100:]
-	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	jsonResponse(w, lines)
 }

@@ -8,30 +8,30 @@ import (
 )
 
 type Config struct {
-	NFS           NFS           `yaml:"nfs"`
-	KeepAwake     KeepAwake     `yaml:"keep_awake"`
-	Notifications Notifications `yaml:"notifications"`
-	Temperature   Temperature   `yaml:"temperature"`
+	NFS           NFS           `yaml:"nfs" json:"nfs"`
+	KeepAwake     KeepAwake     `yaml:"keep_awake" json:"keep_awake"`
+	Notifications Notifications `yaml:"notifications" json:"notifications"`
+	Temperature   Temperature   `yaml:"temperature" json:"temperature"`
 }
 
 type NFS struct {
-	Server string `yaml:"server"`
-	Share  string `yaml:"share"`
+	Server string `yaml:"server" json:"server"`
+	Share  string `yaml:"share" json:"share"`
 }
 
 type KeepAwake struct {
-	Method     string `yaml:"method"` // "ble" or "webhook"
-	VIN        string `yaml:"vin"`
-	WebhookURL string `yaml:"webhook_url"`
+	Method     string `yaml:"method" json:"method"` // "ble" or "webhook"
+	VIN        string `yaml:"vin" json:"vin"`
+	WebhookURL string `yaml:"webhook_url" json:"webhook_url"`
 }
 
 type Notifications struct {
-	WebhookURL string `yaml:"webhook_url"`
+	WebhookURL string `yaml:"webhook_url" json:"webhook_url"`
 }
 
 type Temperature struct {
-	WarningCelsius float64 `yaml:"warning_celsius"`
-	CautionCelsius float64 `yaml:"caution_celsius"`
+	WarningCelsius float64 `yaml:"warning_celsius" json:"warning_celsius"`
+	CautionCelsius float64 `yaml:"caution_celsius" json:"caution_celsius"`
 }
 
 var (
