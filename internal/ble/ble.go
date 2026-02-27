@@ -29,9 +29,23 @@ func teslaKeygen() string {
 	return "/usr/local/bin/tesla-keygen"
 }
 
+// acquireHCI stops bluetoothd so tesla-control can get exclusive HCI access.
+// Returns a cleanup function that restarts bluetoothd.
+func acquireHCI() func() {
+	exec.Command("systemctl", "stop", "bluetooth").Run()
+	exec.Command("rfkill", "unblock", "bluetooth").Run()
+	exec.Command("hciconfig", "hci0", "up").Run()
+	return func() {
+		exec.Command("systemctl", "start", "bluetooth").Run()
+	}
+}
+
 func runBLE(vin string, args ...string) error {
 	baseArgs := []string{"-ble", "-key-file", PrivateKey, "-vin", strings.ToUpper(vin)}
 	baseArgs = append(baseArgs, args...)
+
+	release := acquireHCI()
+	defer release()
 
 	for attempt := 1; attempt <= 3; attempt++ {
 		cmd := exec.Command(teslaControl(), baseArgs...)
@@ -72,6 +86,10 @@ func Pair(vin string) error {
 			return err
 		}
 	}
+
+	release := acquireHCI()
+	defer release()
+
 	cmd := exec.Command(teslaControl(), "-ble", "-vin", strings.ToUpper(vin),
 		"add-key-request", PublicKey, "owner", "cloud_key")
 	out, err := cmd.CombinedOutput()
@@ -83,6 +101,9 @@ func Pair(vin string) error {
 }
 
 func IsPaired(vin string) bool {
+	release := acquireHCI()
+	defer release()
+
 	cmd := exec.Command(teslaControl(), "-ble", "-key-file", PrivateKey,
 		"-vin", strings.ToUpper(vin), "body-controller-state")
 	return cmd.Run() == nil
