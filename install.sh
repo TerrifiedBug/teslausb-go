@@ -22,16 +22,19 @@ if [ -f /usr/local/bin/teslausb ]; then
 fi
 
 # Download latest release tag
+echo "Architecture: $ARCH (binary: $GOARCH, tesla-control: $TCARCH)"
 LATEST=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep tag_name | cut -d'"' -f4)
 if [ -z "$LATEST" ]; then
   echo "ERROR: Could not determine latest release"
   exit 1
 fi
+echo "Latest release: $LATEST"
 
 # Download teslausb binary
-echo "Downloading teslausb $LATEST..."
+echo "Downloading teslausb..."
 curl -fsSL "https://github.com/$REPO/releases/download/$LATEST/teslausb-linux-$GOARCH" -o /usr/local/bin/teslausb
 chmod +x /usr/local/bin/teslausb
+echo "Installed teslausb $(/usr/local/bin/teslausb -version 2>/dev/null || echo "$LATEST")"
 
 # Download tesla-control (MikeBishop only publishes armv7 — runs fine on arm64)
 echo "Downloading tesla-control..."
