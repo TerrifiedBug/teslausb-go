@@ -72,6 +72,15 @@ func (m *Machine) Info() map[string]any {
 	}
 }
 
+// TriggerArchive forces a transition to arriving state if currently idle.
+func (m *Machine) TriggerArchive() bool {
+	if m.State() == StateIdle {
+		m.setState(StateArriving)
+		return true
+	}
+	return false
+}
+
 func (m *Machine) OnStateChange(fn func(State)) {
 	m.mu.Lock()
 	m.listeners = append(m.listeners, fn)

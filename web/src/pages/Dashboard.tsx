@@ -95,7 +95,7 @@ export function Dashboard() {
           {status.last_error}
         </div>
       )}
-      <div className="text-xs text-gray-600">v{status.version}</div>
+      <div className="text-xs text-gray-600">{status.version}</div>
     </div>
   );
 }

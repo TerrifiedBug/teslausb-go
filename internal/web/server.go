@@ -227,7 +227,11 @@ func (s *Server) handleTestNFS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTriggerArchive(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, map[string]string{"status": "triggered"})
+	if s.machine.TriggerArchive() {
+		jsonResponse(w, map[string]string{"status": "triggered"})
+	} else {
+		jsonResponse(w, map[string]string{"status": "not_idle", "error": "can only trigger archive from idle state"})
+	}
 }
 
 func (s *Server) handleBLEPair(w http.ResponseWriter, r *http.Request) {
