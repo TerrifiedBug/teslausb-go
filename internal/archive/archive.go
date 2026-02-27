@@ -16,35 +16,23 @@ import (
 
 const ArchiveMount = "/mnt/archive"
 
-// IsReachable checks if the archive server is reachable.
+// IsReachable checks if the archive server is reachable via TCP.
 func IsReachable() bool {
 	cfg := config.Get()
 	if cfg == nil {
 		return false
 	}
 	if cfg.Archive.Method == "cifs" {
-		return isCIFSReachable(cfg)
+		return tcpReachable(cfg.CIFS.Server, "445")
 	}
-	return isNFSReachable(cfg)
+	return tcpReachable(cfg.NFS.Server, "2049")
 }
 
-func isNFSReachable(cfg *config.Config) bool {
-	if cfg.NFS.Server == "" {
+func tcpReachable(host, port string) bool {
+	if host == "" {
 		return false
 	}
-	conn, err := net.DialTimeout("tcp", cfg.NFS.Server+":2049", 5*time.Second)
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
-}
-
-func isCIFSReachable(cfg *config.Config) bool {
-	if cfg.CIFS.Server == "" {
-		return false
-	}
-	conn, err := net.DialTimeout("tcp", cfg.CIFS.Server+":445", 5*time.Second)
+	conn, err := net.DialTimeout("tcp", host+":"+port, 5*time.Second)
 	if err != nil {
 		return false
 	}
@@ -61,9 +49,10 @@ func MountArchive() error {
 	return MountNFS()
 }
 
-// UnmountArchive unmounts whichever archive share is mounted.
+// UnmountArchive unmounts the archive share.
 func UnmountArchive() {
-	UnmountNFS()
+	exec.Command("umount", "-f", "-l", ArchiveMount).Run()
+	log.Println("archive unmounted")
 }
 
 // MountCIFS mounts the configured CIFS/SMB share with auto-negotiation.
@@ -104,12 +93,6 @@ func MountNFS() error {
 	}
 	log.Printf("NFS mounted: %s", source)
 	return nil
-}
-
-// UnmountNFS unmounts the NFS share.
-func UnmountNFS() {
-	exec.Command("umount", "-f", "-l", ArchiveMount).Run()
-	log.Println("NFS unmounted")
 }
 
 // ArchiveClips copies SavedClips and SentryClips (and optionally RecentClips) to the NFS share via rsync.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import type { Status, UpdateInfo } from '../lib/api';
+import { formatBytes } from '../lib/format';
 import { WSClient } from '../lib/ws';
 
 const stateColors: Record<string, string> = {
@@ -11,14 +12,6 @@ const stateColors: Record<string, string> = {
   booting: 'bg-gray-500',
   error: 'bg-red-500',
 };
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
 
 function signalPercent(dbm: number): number {
   if (dbm >= -50) return 100;

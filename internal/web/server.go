@@ -75,8 +75,6 @@ func (s *Server) Start(addr string) error {
 		s.hub.Broadcast(map[string]any{"type": "state", "state": string(st)})
 	})
 
-	go s.hub.Run()
-
 	log.Printf("web server starting on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }

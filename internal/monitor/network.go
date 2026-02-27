@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -16,65 +17,33 @@ type NetworkInfo struct {
 func GetNetworkInfo() NetworkInfo {
 	info := NetworkInfo{}
 
-	// SSID
 	if out, err := exec.Command("iwgetid", "-r").Output(); err == nil {
 		info.SSID = strings.TrimSpace(string(out))
 	}
 
-	// Signal from /proc/net/wireless
+	// Signal from /proc/net/wireless (skip 2 header lines)
 	if f, err := os.Open("/proc/net/wireless"); err == nil {
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
-		lineNum := 0
-		for scanner.Scan() {
-			lineNum++
-			if lineNum <= 2 {
-				continue // skip header lines
+		for lineNum := 0; scanner.Scan(); lineNum++ {
+			if lineNum < 2 {
+				continue
 			}
-			fields := strings.Fields(scanner.Text())
-			if len(fields) >= 4 {
-				// field 3 is signal level (dBm), may have trailing "."
-				val := strings.TrimRight(fields[3], ".")
-				var dbm int
-				for i, c := range val {
-					if c == '-' && i == 0 {
-						continue
-					}
-					if c < '0' || c > '9' {
-						break
-					}
+			if fields := strings.Fields(scanner.Text()); len(fields) >= 4 {
+				if dbm, err := strconv.Atoi(strings.TrimRight(fields[3], ".")); err == nil {
+					info.SignalDBM = dbm
 				}
-				// Simple atoi
-				neg := false
-				for _, c := range val {
-					if c == '-' {
-						neg = true
-						continue
-					}
-					if c >= '0' && c <= '9' {
-						dbm = dbm*10 + int(c-'0')
-					}
-				}
-				if neg {
-					dbm = -dbm
-				}
-				info.SignalDBM = dbm
 			}
-			break // only first interface
+			break
 		}
 	}
 
-	// IP address — find wlan0 IP
+	// IP from wlan0: "3: wlan0    inet 192.168.1.5/24 ..."
 	if out, err := exec.Command("ip", "-4", "-o", "addr", "show", "wlan0").Output(); err == nil {
-		// Format: "3: wlan0    inet 192.168.1.5/24 ..."
 		fields := strings.Fields(string(out))
 		for i, f := range fields {
 			if f == "inet" && i+1 < len(fields) {
-				ip := fields[i+1]
-				if idx := strings.Index(ip, "/"); idx > 0 {
-					ip = ip[:idx]
-				}
-				info.IP = ip
+				info.IP, _, _ = strings.Cut(fields[i+1], "/")
 				break
 			}
 		}
