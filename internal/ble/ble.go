@@ -53,7 +53,13 @@ func runBLE(vin string, args ...string) error {
 		if err == nil {
 			return nil
 		}
-		log.Printf("BLE attempt %d/%d failed: %s: %v", attempt, 3, strings.TrimSpace(string(out)), err)
+		outStr := strings.TrimSpace(string(out))
+		// Car rejects BLE when USB cable is connected — no need to retry
+		if strings.Contains(outStr, "cable connected") {
+			log.Printf("BLE skipped: car has USB cable connected (keep-awake not needed)")
+			return nil
+		}
+		log.Printf("BLE attempt %d/%d failed: %s: %v", attempt, 3, outStr, err)
 		if attempt < 3 {
 			time.Sleep(30 * time.Second)
 		}
