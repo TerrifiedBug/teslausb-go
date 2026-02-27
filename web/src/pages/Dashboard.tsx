@@ -93,7 +93,15 @@ export function Dashboard() {
           </div>
         </div>
         <div className="bg-gray-900 rounded-lg p-4 border border-gray-800">
-          <div className="text-sm text-gray-400 mb-1">Last Archive</div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-sm text-gray-400">Last Archive</div>
+            <button
+              onClick={() => api.triggerArchive()}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs transition-colors"
+            >
+              Trigger Archive
+            </button>
+          </div>
           <div className="text-lg font-medium">
             {status.last_archive && status.last_archive !== '0001-01-01T00:00:00Z'
               ? new Date(status.last_archive).toLocaleString()
@@ -131,14 +139,6 @@ export function Dashboard() {
             </div>
           </div>
         )}
-      </div>
-      <div className="flex gap-2">
-        <button
-          onClick={() => api.triggerArchive()}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm transition-colors"
-        >
-          Trigger Archive
-        </button>
       </div>
       {status.last_error && (
         <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 text-sm text-red-300">
