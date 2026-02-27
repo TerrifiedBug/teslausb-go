@@ -29,43 +29,44 @@ export function Config() {
   };
 
   const [testing, setTesting] = useState(false);
+  const [testMessage, setTestMessage] = useState('');
 
   const testNFS = async () => {
     if (!config?.nfs.server || !config?.nfs.share) {
-      setMessage('Enter server and share first');
+      setTestMessage('Enter server and share first');
       return;
     }
     setTesting(true);
-    setMessage('');
+    setTestMessage('');
     try {
       const result = await api.testNFS(config.nfs.server, config.nfs.share);
       if (result.ok) {
-        setMessage(result.message || 'NFS connection successful');
+        setTestMessage(result.message || 'NFS connection successful');
       } else {
-        setMessage(`Error: ${result.error}`);
+        setTestMessage(`Error: ${result.error}`);
       }
     } catch (e: any) {
-      setMessage(`Error: ${e.message}`);
+      setTestMessage(`Error: ${e.message}`);
     }
     setTesting(false);
   };
 
   const testCIFS = async () => {
     if (!config?.cifs.server || !config?.cifs.share) {
-      setMessage('Enter server and share first');
+      setTestMessage('Enter server and share first');
       return;
     }
     setTesting(true);
-    setMessage('');
+    setTestMessage('');
     try {
       const result = await api.testCIFS(config.cifs.server, config.cifs.share, config.cifs.username, config.cifs.password);
       if (result.ok) {
-        setMessage(result.message || 'CIFS connection successful');
+        setTestMessage(result.message || 'CIFS connection successful');
       } else {
-        setMessage(`Error: ${result.error}`);
+        setTestMessage(`Error: ${result.error}`);
       }
     } catch (e: any) {
-      setMessage(`Error: ${e.message}`);
+      setTestMessage(`Error: ${e.message}`);
     }
     setTesting(false);
   };
@@ -127,13 +128,16 @@ export function Config() {
                 />
               </div>
             </div>
-            <button
-              onClick={testNFS}
-              disabled={testing}
-              className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-sm text-gray-300"
-            >
-              {testing ? 'Testing...' : 'Test Connection'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={testNFS}
+                disabled={testing}
+                className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-sm text-gray-300"
+              >
+                {testing ? 'Testing...' : 'Test Connection'}
+              </button>
+              {testMessage && <span className={`text-sm ${testMessage.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>{testMessage}</span>}
+            </div>
           </>
         ) : (
           <>
@@ -176,13 +180,16 @@ export function Config() {
                 />
               </div>
             </div>
-            <button
-              onClick={testCIFS}
-              disabled={testing}
-              className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-sm text-gray-300"
-            >
-              {testing ? 'Testing...' : 'Test Connection'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={testCIFS}
+                disabled={testing}
+                className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 border border-gray-700 rounded text-sm text-gray-300"
+              >
+                {testing ? 'Testing...' : 'Test Connection'}
+              </button>
+              {testMessage && <span className={`text-sm ${testMessage.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>{testMessage}</span>}
+            </div>
           </>
         )}
       </section>
