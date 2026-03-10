@@ -16,6 +16,12 @@ const (
 	MountPoint  = "/mnt/cam"
 )
 
+const (
+	diskReserveBytes       = 500 * 1024 * 1024 // 500MB headroom for backing partition
+	minDiskSize            = 1024 * 1024 * 1024 // 1GB minimum cam disk
+	truncatedClipThreshold = int64(100_000)      // clips smaller than this are truncated
+)
+
 func Exists() bool {
 	_, err := os.Stat(BackingFile)
 	return err == nil
@@ -34,9 +40,9 @@ func Create() error {
 		return fmt.Errorf("statfs: %w", err)
 	}
 	available := int64(stat.Bavail) * int64(stat.Bsize)
-	reserve := int64(500 * 1024 * 1024) // 500MB headroom
+	reserve := int64(diskReserveBytes)
 	size := available - reserve
-	if size < 1024*1024*1024 { // minimum 1GB
+	if size < minDiskSize {
 		return fmt.Errorf("not enough space: %d bytes available", available)
 	}
 
@@ -157,7 +163,7 @@ func CleanArtifacts() {
 		if err != nil || info.IsDir() {
 			return nil
 		}
-		if strings.HasSuffix(strings.ToLower(path), ".mp4") && info.Size() < 100_000 {
+		if strings.HasSuffix(strings.ToLower(path), ".mp4") && info.Size() < truncatedClipThreshold {
 			os.Remove(path)
 			log.Printf("cleaned truncated: %s (%d bytes)", filepath.Base(path), info.Size())
 		}

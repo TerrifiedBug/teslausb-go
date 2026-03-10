@@ -53,6 +53,12 @@ type Machine struct {
 const lastArchiveFile = "/mutable/teslausb/last_archive"
 const statsFile = "/mutable/teslausb/stats.json"
 
+const (
+	pollInterval          = 30 * time.Second
+	networkStabilizeDelay = 20 * time.Second
+	keepAliveInterval     = 5 * time.Minute
+)
+
 func New() *Machine {
 	m := &Machine{state: StateBooting}
 	// Restore last archive timestamp
@@ -164,7 +170,7 @@ func (m *Machine) Run(ctx context.Context) error {
 }
 
 func (m *Machine) runAway(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -190,8 +196,8 @@ func (m *Machine) runAway(ctx context.Context) {
 func (m *Machine) runArriving(ctx context.Context) {
 	system.SetLED("fastblink")
 
-	log.Println("archive server reachable, waiting 20s for network to stabilize...")
-	time.Sleep(20 * time.Second)
+	log.Println("archive server reachable, waiting for network to stabilize...")
+	time.Sleep(networkStabilizeDelay)
 
 	system.SyncTime()
 
@@ -236,7 +242,7 @@ func (m *Machine) runArchiving(ctx context.Context) {
 
 	keepAliveCtx, keepAliveCancel := context.WithCancel(ctx)
 	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
+		ticker := time.NewTicker(keepAliveInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -314,7 +320,7 @@ func (m *Machine) runIdle(ctx context.Context) {
 		notify.Send(ctx, webhook.Event{Event: "usb_connected", Message: "USB gadget re-enabled"})
 	}
 
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {

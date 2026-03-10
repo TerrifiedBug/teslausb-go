@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+const (
+	idleThresholdBytes      = int64(500_000) // bytes/sec below which USB is "idle"
+	idleConsecutiveRequired = 5              // consecutive idle checks needed
+	idleTimeoutSeconds      = 90             // max seconds to wait for idle
+)
+
 func findMassStoragePID() (int, error) {
 	entries, _ := os.ReadDir("/proc")
 	for _, e := range entries {
@@ -53,10 +59,10 @@ func WaitForIdle() error {
 
 	prevBytes := int64(-1)
 	idleCount := 0
-	threshold := int64(500_000)
+	threshold := idleThresholdBytes
 
 	log.Println("waiting for USB write idle...")
-	for i := 0; i < 90; i++ {
+	for i := 0; i < idleTimeoutSeconds; i++ {
 		time.Sleep(1 * time.Second)
 		written, err := readWriteBytes(pid)
 		if err != nil {
@@ -71,7 +77,7 @@ func WaitForIdle() error {
 
 		if delta < threshold {
 			idleCount++
-			if idleCount >= 5 {
+			if idleCount >= idleConsecutiveRequired {
 				log.Println("USB write idle detected")
 				return nil
 			}
@@ -79,5 +85,5 @@ func WaitForIdle() error {
 			idleCount = 0
 		}
 	}
-	return fmt.Errorf("timeout waiting for USB idle after 90 seconds")
+	return fmt.Errorf("timeout waiting for USB idle after %d seconds", idleTimeoutSeconds)
 }
