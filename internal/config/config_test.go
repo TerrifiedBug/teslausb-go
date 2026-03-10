@@ -65,3 +65,24 @@ func TestSaveAndReload(t *testing.T) {
 		t.Errorf("expected 10.0.0.1, got %s", loaded.NFS.Server)
 	}
 }
+
+func TestGetReturnsCopy(t *testing.T) {
+	// Load a config so current is set
+	tmpFile := filepath.Join(t.TempDir(), "test.yaml")
+	os.WriteFile(tmpFile, []byte("nfs:\n  server: original\n"), 0644)
+	Load(tmpFile)
+
+	cfg1 := Get()
+	if cfg1 == nil {
+		t.Fatal("expected non-nil config")
+	}
+	cfg1.NFS.Server = "mutated"
+
+	cfg2 := Get()
+	if cfg2.NFS.Server == "mutated" {
+		t.Error("Get() should return a copy; mutation leaked through")
+	}
+	if cfg2.NFS.Server != "original" {
+		t.Errorf("expected 'original', got %q", cfg2.NFS.Server)
+	}
+}
