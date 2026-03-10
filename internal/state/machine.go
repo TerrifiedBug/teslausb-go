@@ -243,12 +243,10 @@ func (m *Machine) runArriving(ctx context.Context) {
 	m.setState(StateArchiving)
 }
 
-func (m *Machine) runArchiving(ctx context.Context) {
-	cfg := config.Get()
-
+// startKeepAlive begins periodic keep-awake nudges and returns a cancel function.
+func (m *Machine) startKeepAlive(ctx context.Context, cfg *config.Config) context.CancelFunc {
 	m.sendKeepAwake(ctx, cfg, "start")
-
-	keepAliveCtx, keepAliveCancel := context.WithCancel(ctx)
+	keepAliveCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		ticker := time.NewTicker(keepAliveInterval)
 		defer ticker.Stop()
@@ -261,13 +259,41 @@ func (m *Machine) runArchiving(ctx context.Context) {
 			}
 		}
 	}()
+	return cancel
+}
+
+// updateAndPersistStats records archive results in memory and writes to disk.
+func (m *Machine) updateAndPersistStats(clips int, bytes int64) {
+	now := time.Now()
+	m.mu.Lock()
+	m.lastArchive = now
+	m.archiveClips = clips
+	m.archiveBytes = bytes
+	m.cumulative.TotalClips += clips
+	m.cumulative.TotalBytes += bytes
+	m.cumulative.ArchiveCount++
+	m.cumulative.LastArchive = now
+	cumSnapshot := m.cumulative
+	m.mu.Unlock()
+
+	os.WriteFile(lastArchiveFile, []byte(now.Format(time.RFC3339)), 0644)
+	if data, err := json.Marshal(cumSnapshot); err == nil {
+		if err := os.WriteFile(statsFile, data, 0644); err != nil {
+			log.Printf("save stats: %v", err)
+		}
+	}
+}
+
+func (m *Machine) runArchiving(ctx context.Context) {
+	cfg := config.Get()
+	stopKeepAlive := m.startKeepAlive(ctx, cfg)
 
 	notify.Send(ctx, webhook.Event{Event: "archive_started", Message: "Archiving dashcam clips"})
 	start := time.Now()
 	clips, bytes, err := archive.ArchiveClips(ctx)
 	duration := time.Since(start)
 
-	keepAliveCancel()
+	stopKeepAlive()
 
 	if err != nil {
 		m.mu.Lock()
@@ -279,23 +305,7 @@ func (m *Machine) runArchiving(ctx context.Context) {
 			Message: err.Error(),
 		})
 	} else {
-		now := time.Now()
-		m.mu.Lock()
-		m.lastArchive = now
-		m.archiveClips = clips
-		m.archiveBytes = bytes
-		m.cumulative.TotalClips += clips
-		m.cumulative.TotalBytes += bytes
-		m.cumulative.ArchiveCount++
-		m.cumulative.LastArchive = now
-		cumSnapshot := m.cumulative
-		m.mu.Unlock()
-		os.WriteFile(lastArchiveFile, []byte(now.Format(time.RFC3339)), 0644)
-		if statsData, err := json.Marshal(cumSnapshot); err == nil {
-			if err := os.WriteFile(statsFile, statsData, 0644); err != nil {
-				log.Printf("save stats: %v", err)
-			}
-		}
+		m.updateAndPersistStats(clips, bytes)
 		notify.Send(ctx, webhook.Event{
 			Event:   "archive_complete",
 			Message: fmt.Sprintf("Archived %d clips in %s", clips, duration.Round(time.Second)),
