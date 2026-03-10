@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/teslausb-go/teslausb/internal/ble"
 	"github.com/teslausb-go/teslausb/internal/config"
@@ -206,30 +204,18 @@ func (s *Server) handleTestNFS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Test TCP connectivity to NFS port
-	conn, err := net.DialTimeout("tcp", req.Server+":2049", 5*time.Second)
-	if err != nil {
-		jsonResponse(w, map[string]any{"ok": false, "error": fmt.Sprintf("Cannot reach %s:2049 — %v", req.Server, err)})
-		return
-	}
-	conn.Close()
-
-	// Try a temporary mount
-	testDir := "/tmp/nfs-test"
-	os.MkdirAll(testDir, 0755)
-	defer func() {
-		exec.Command("umount", "-f", "-l", testDir).Run()
-		os.Remove(testDir)
-	}()
-
 	source := fmt.Sprintf("%s:%s", req.Server, req.Share)
-	out, err := exec.Command("mount", "-t", "nfs", source, testDir, "-o", "ro,nolock,proto=tcp,vers=3,timeo=10,retrans=1").CombinedOutput()
-	if err != nil {
-		jsonResponse(w, map[string]any{"ok": false, "error": fmt.Sprintf("Mount failed: %s", strings.TrimSpace(string(out)))})
-		return
-	}
-
-	jsonResponse(w, map[string]any{"ok": true, "message": fmt.Sprintf("Successfully mounted %s", source)})
+	s.runMountTest(w, mountTest{
+		host:    req.Server,
+		port:    "2049",
+		source:  source,
+		testDir: "/tmp/nfs-test",
+		mount: func(dir string) ([]byte, error) {
+			cmd := exec.Command("mount", "-t", "nfs", source, dir,
+				"-o", "ro,nolock,proto=tcp,vers=3,timeo=10,retrans=1")
+			return cmd.CombinedOutput()
+		},
+	})
 }
 
 func (s *Server) handleTestCIFS(w http.ResponseWriter, r *http.Request) {
@@ -245,34 +231,22 @@ func (s *Server) handleTestCIFS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Test TCP connectivity to SMB port
-	conn, err := net.DialTimeout("tcp", req.Server+":445", 5*time.Second)
-	if err != nil {
-		jsonResponse(w, map[string]any{"ok": false, "error": fmt.Sprintf("Cannot reach %s:445 — %v", req.Server, err)})
-		return
-	}
-	conn.Close()
-
-	// Try a temporary mount
-	testDir := "/tmp/cifs-test"
-	os.MkdirAll(testDir, 0755)
-	defer func() {
-		exec.Command("umount", "-f", "-l", testDir).Run()
-		os.Remove(testDir)
-	}()
-
 	source := fmt.Sprintf("//%s/%s", req.Server, req.Share)
 	credFile := "/tmp/.cifs-test-credentials"
-	os.WriteFile(credFile, []byte(fmt.Sprintf("username=%s\npassword=%s\n", req.Username, req.Password)), 0600)
-	defer os.Remove(credFile)
-	opts := fmt.Sprintf("credentials=%s,vers=3.0", credFile)
-	out, err := exec.Command("mount", "-t", "cifs", source, testDir, "-o", opts).CombinedOutput()
-	if err != nil {
-		jsonResponse(w, map[string]any{"ok": false, "error": fmt.Sprintf("Mount failed: %s", strings.TrimSpace(string(out)))})
-		return
-	}
 
-	jsonResponse(w, map[string]any{"ok": true, "message": fmt.Sprintf("Successfully mounted %s", source)})
+	s.runMountTest(w, mountTest{
+		host:    req.Server,
+		port:    "445",
+		source:  source,
+		testDir: "/tmp/cifs-test",
+		mount: func(dir string) ([]byte, error) {
+			os.WriteFile(credFile, []byte(fmt.Sprintf("username=%s\npassword=%s\n", req.Username, req.Password)), 0600)
+			opts := fmt.Sprintf("credentials=%s,vers=3.0", credFile)
+			cmd := exec.Command("mount", "-t", "cifs", source, dir, "-o", opts)
+			return cmd.CombinedOutput()
+		},
+		cleanup: func() { os.Remove(credFile) },
+	})
 }
 
 func (s *Server) handleTriggerArchive(w http.ResponseWriter, r *http.Request) {
