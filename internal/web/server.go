@@ -113,12 +113,12 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	if reqPath == "" {
 		reqPath = "TeslaCam"
 	}
-	reqPath = filepath.Clean(reqPath)
-	if strings.Contains(reqPath, "..") {
+	fullPath, err := safePath(disk.MountPoint, reqPath)
+	if err != nil {
 		http.Error(w, "invalid path", 400)
 		return
 	}
-	fullPath := filepath.Join(disk.MountPoint, reqPath)
+	reqPath = filepath.Clean(reqPath) // normalize for JSON response paths
 	entries, err := os.ReadDir(fullPath)
 	if err != nil {
 		jsonResponse(w, []any{})
@@ -149,12 +149,11 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDownloadFile(w http.ResponseWriter, r *http.Request) {
-	reqPath := filepath.Clean(r.URL.Query().Get("path"))
-	if strings.Contains(reqPath, "..") {
+	fullPath, err := safePath(disk.MountPoint, r.URL.Query().Get("path"))
+	if err != nil {
 		http.Error(w, "invalid path", 400)
 		return
 	}
-	fullPath := filepath.Join(disk.MountPoint, reqPath)
 	http.ServeFile(w, r, fullPath)
 }
 
@@ -163,12 +162,11 @@ func (s *Server) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 		Path string `json:"path"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	req.Path = filepath.Clean(req.Path)
-	if strings.Contains(req.Path, "..") {
+	fullPath, err := safePath(disk.MountPoint, req.Path)
+	if err != nil {
 		http.Error(w, "invalid path", 400)
 		return
 	}
-	fullPath := filepath.Join(disk.MountPoint, req.Path)
 	if err := os.RemoveAll(fullPath); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
