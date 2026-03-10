@@ -14,6 +14,7 @@ import (
 	"github.com/teslausb-go/teslausb/internal/state"
 	"github.com/teslausb-go/teslausb/internal/system"
 	"github.com/teslausb-go/teslausb/internal/web"
+	"github.com/teslausb-go/teslausb/internal/wire"
 )
 
 var version = "dev"
@@ -72,7 +73,7 @@ func main() {
 	go monitor.RunWiFiMonitor(ctx)
 
 	// Create state machine
-	machine := state.New()
+	machine := state.New(wire.NewDeps())
 
 	// Start web server
 	srv := web.NewServer(machine, version, *configPath)
