@@ -125,6 +125,20 @@ func (m *Machine) setState(s State) {
 	}
 }
 
+// tryEnableGadget attempts to enable the USB gadget if not already enabled.
+// Returns true if the gadget was just enabled (for callers that want to notify).
+func (m *Machine) tryEnableGadget() bool {
+	if m.gadgetEnabled {
+		return false
+	}
+	if err := gadget.Enable(disk.BackingFile); err != nil {
+		return false
+	}
+	m.gadgetEnabled = true
+	log.Println("USB gadget enabled (delayed)")
+	return true
+}
+
 // Run starts the main state machine loop.
 func (m *Machine) Run(ctx context.Context) error {
 	// First-run: create disk image if needed
@@ -178,13 +192,7 @@ func (m *Machine) runAway(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Retry gadget enable if it failed (e.g. UDC wasn't available at boot)
-			if !m.gadgetEnabled {
-				if err := gadget.Enable(disk.BackingFile); err == nil {
-					m.gadgetEnabled = true
-					log.Println("USB gadget enabled (delayed)")
-				}
-			}
+			m.tryEnableGadget()
 			if archive.IsReachable() {
 				m.setState(StateArriving)
 				return
@@ -328,13 +336,8 @@ func (m *Machine) runIdle(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Retry gadget if it failed
-			if !m.gadgetEnabled {
-				if err := gadget.Enable(disk.BackingFile); err == nil {
-					m.gadgetEnabled = true
-					log.Println("USB gadget enabled (delayed)")
-					notify.Send(ctx, webhook.Event{Event: "usb_connected", Message: "USB gadget re-enabled"})
-				}
+			if m.tryEnableGadget() {
+				notify.Send(ctx, webhook.Event{Event: "usb_connected", Message: "USB gadget re-enabled"})
 			}
 			if !archive.IsReachable() {
 				log.Println("archive server unreachable — user left home")
