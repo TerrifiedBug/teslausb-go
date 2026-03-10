@@ -2,7 +2,6 @@ package web
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"sync"
 
@@ -10,7 +9,7 @@ import (
 )
 
 type Hub struct {
-	mu      sync.RWMutex
+	mu      sync.Mutex
 	clients map[*websocket.Conn]bool
 }
 
@@ -46,12 +45,17 @@ func (h *Hub) Broadcast(data any) {
 		return
 	}
 
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
+	var dead []*websocket.Conn
 	for ws := range h.clients {
 		if _, err := ws.Write(msg); err != nil {
-			log.Printf("ws write error: %v", err)
+			dead = append(dead, ws)
 		}
+	}
+	for _, ws := range dead {
+		delete(h.clients, ws)
+		ws.Close()
 	}
 }

@@ -10,13 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/teslausb-go/teslausb/internal/archive"
-	"github.com/teslausb-go/teslausb/internal/ble"
-	"github.com/teslausb-go/teslausb/internal/config"
-	"github.com/teslausb-go/teslausb/internal/disk"
-	"github.com/teslausb-go/teslausb/internal/gadget"
-	"github.com/teslausb-go/teslausb/internal/notify"
-	"github.com/teslausb-go/teslausb/internal/system"
 	"github.com/teslausb-go/teslausb/internal/webhook"
 )
 
@@ -40,6 +33,7 @@ type CumulativeStats struct {
 
 type Machine struct {
 	mu            sync.RWMutex
+	deps          Deps
 	state         State
 	lastArchive   time.Time
 	lastError     string
@@ -53,8 +47,14 @@ type Machine struct {
 const lastArchiveFile = "/mutable/teslausb/last_archive"
 const statsFile = "/mutable/teslausb/stats.json"
 
-func New() *Machine {
-	m := &Machine{state: StateBooting}
+const (
+	pollInterval          = 30 * time.Second
+	networkStabilizeDelay = 20 * time.Second
+	keepAliveInterval     = 5 * time.Minute
+)
+
+func New(deps Deps) *Machine {
+	m := &Machine{state: StateBooting, deps: deps}
 	// Restore last archive timestamp
 	if data, err := os.ReadFile(lastArchiveFile); err == nil {
 		if t, err := time.Parse(time.RFC3339, strings.TrimSpace(string(data))); err == nil {
@@ -119,18 +119,30 @@ func (m *Machine) setState(s State) {
 	}
 }
 
+// tryEnableGadget attempts to enable the USB gadget if not already enabled.
+// Returns true if the gadget was just enabled (for callers that want to notify).
+func (m *Machine) tryEnableGadget() bool {
+	if m.gadgetEnabled {
+		return false
+	}
+	if err := m.deps.Gadget.Enable(m.deps.Disk.BackingFilePath()); err != nil {
+		return false
+	}
+	m.gadgetEnabled = true
+	log.Println("USB gadget enabled (delayed)")
+	return true
+}
+
 // Run starts the main state machine loop.
 func (m *Machine) Run(ctx context.Context) error {
-	// First-run: create disk image if needed
-	if !disk.Exists() {
+	if !m.deps.Disk.Exists() {
 		log.Println("first run: creating cam disk image...")
-		if err := disk.Create(); err != nil {
+		if err := m.deps.Disk.Create(); err != nil {
 			return fmt.Errorf("create disk: %w", err)
 		}
 	}
 
-	// Enable USB gadget (non-fatal — web UI should work even without UDC)
-	if err := gadget.Enable(disk.BackingFile); err != nil {
+	if err := m.deps.Gadget.Enable(m.deps.Disk.BackingFilePath()); err != nil {
 		log.Printf("warning: %v (web UI still available, gadget will retry)", err)
 		m.mu.Lock()
 		m.lastError = err.Error()
@@ -140,12 +152,12 @@ func (m *Machine) Run(ctx context.Context) error {
 	}
 
 	m.setState(StateAway)
-	system.SetLED("slowblink")
+	m.deps.System.SetLED("slowblink")
 
 	for {
 		select {
 		case <-ctx.Done():
-			gadget.Disable()
+			m.deps.Gadget.Disable()
 			return nil
 		default:
 		}
@@ -164,7 +176,7 @@ func (m *Machine) Run(ctx context.Context) error {
 }
 
 func (m *Machine) runAway(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -172,14 +184,8 @@ func (m *Machine) runAway(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Retry gadget enable if it failed (e.g. UDC wasn't available at boot)
-			if !m.gadgetEnabled {
-				if err := gadget.Enable(disk.BackingFile); err == nil {
-					m.gadgetEnabled = true
-					log.Println("USB gadget enabled (delayed)")
-				}
-			}
-			if archive.IsReachable() {
+			m.tryEnableGadget()
+			if m.deps.Archive.IsReachable() {
 				m.setState(StateArriving)
 				return
 			}
@@ -188,18 +194,18 @@ func (m *Machine) runAway(ctx context.Context) {
 }
 
 func (m *Machine) runArriving(ctx context.Context) {
-	system.SetLED("fastblink")
+	m.deps.System.SetLED("fastblink")
 
-	log.Println("archive server reachable, waiting 20s for network to stabilize...")
-	time.Sleep(20 * time.Second)
+	log.Println("archive server reachable, waiting for network to stabilize...")
+	time.Sleep(networkStabilizeDelay)
 
-	system.SyncTime()
+	m.deps.System.SyncTime()
 
-	if err := gadget.WaitForIdle(); err != nil {
+	if err := m.deps.Gadget.WaitForIdle(); err != nil {
 		log.Printf("wait for idle: %v", err)
 	}
 
-	if err := gadget.Disable(); err != nil {
+	if err := m.deps.Gadget.Disable(); err != nil {
 		log.Printf("disable gadget: %v", err)
 		m.gadgetEnabled = false
 		m.setState(StateAway)
@@ -207,21 +213,21 @@ func (m *Machine) runArriving(ctx context.Context) {
 	}
 	m.gadgetEnabled = false
 
-	notify.Send(ctx, webhook.Event{Event: "usb_disconnected", Message: "USB gadget disabled for archiving"})
+	m.deps.Notify.Send(ctx, webhook.Event{Event: "usb_disconnected", Message: "USB gadget disabled for archiving"})
 
-	if err := disk.Mount(); err != nil {
+	if err := m.deps.Disk.Mount(); err != nil {
 		log.Printf("mount cam: %v", err)
-		gadget.Enable(disk.BackingFile)
+		m.deps.Gadget.Enable(m.deps.Disk.BackingFilePath())
 		m.setState(StateAway)
 		return
 	}
 
-	disk.CleanArtifacts()
+	m.deps.Disk.CleanArtifacts()
 
-	if err := archive.MountArchive(); err != nil {
+	if err := m.deps.Archive.MountArchive(); err != nil {
 		log.Printf("mount archive: %v", err)
-		disk.Unmount()
-		gadget.Enable(disk.BackingFile)
+		m.deps.Disk.Unmount()
+		m.deps.Gadget.Enable(m.deps.Disk.BackingFilePath())
 		m.setState(StateAway)
 		return
 	}
@@ -229,60 +235,69 @@ func (m *Machine) runArriving(ctx context.Context) {
 	m.setState(StateArchiving)
 }
 
-func (m *Machine) runArchiving(ctx context.Context) {
-	cfg := config.Get()
-
-	m.sendKeepAwake(ctx, cfg, "start")
-
-	keepAliveCtx, keepAliveCancel := context.WithCancel(ctx)
+// startKeepAlive begins periodic keep-awake nudges and returns a cancel function.
+func (m *Machine) startKeepAlive(ctx context.Context) context.CancelFunc {
+	m.deps.KeepAwake.Send(ctx, "start")
+	keepAliveCtx, cancel := context.WithCancel(ctx)
 	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
+		ticker := time.NewTicker(keepAliveInterval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-keepAliveCtx.Done():
 				return
 			case <-ticker.C:
-				m.sendKeepAwake(keepAliveCtx, cfg, "nudge")
+				m.deps.KeepAwake.Send(keepAliveCtx, "nudge")
 			}
 		}
 	}()
+	return cancel
+}
 
-	notify.Send(ctx, webhook.Event{Event: "archive_started", Message: "Archiving dashcam clips"})
+// updateAndPersistStats records archive results in memory and writes to disk.
+func (m *Machine) updateAndPersistStats(clips int, bytes int64) {
+	now := time.Now()
+	m.mu.Lock()
+	m.lastArchive = now
+	m.archiveClips = clips
+	m.archiveBytes = bytes
+	m.cumulative.TotalClips += clips
+	m.cumulative.TotalBytes += bytes
+	m.cumulative.ArchiveCount++
+	m.cumulative.LastArchive = now
+	cumSnapshot := m.cumulative
+	m.mu.Unlock()
+
+	os.WriteFile(lastArchiveFile, []byte(now.Format(time.RFC3339)), 0644)
+	if data, err := json.Marshal(cumSnapshot); err == nil {
+		if err := os.WriteFile(statsFile, data, 0644); err != nil {
+			log.Printf("save stats: %v", err)
+		}
+	}
+}
+
+func (m *Machine) runArchiving(ctx context.Context) {
+	stopKeepAlive := m.startKeepAlive(ctx)
+
+	m.deps.Notify.Send(ctx, webhook.Event{Event: "archive_started", Message: "Archiving dashcam clips"})
 	start := time.Now()
-	clips, bytes, err := archive.ArchiveClips(ctx)
+	clips, bytes, err := m.deps.Archive.ArchiveClips(ctx)
 	duration := time.Since(start)
 
-	keepAliveCancel()
+	stopKeepAlive()
 
 	if err != nil {
 		m.mu.Lock()
 		m.lastError = err.Error()
 		m.mu.Unlock()
 		log.Printf("archive error: %v", err)
-		notify.Send(ctx, webhook.Event{
+		m.deps.Notify.Send(ctx, webhook.Event{
 			Event:   "archive_error",
 			Message: err.Error(),
 		})
 	} else {
-		now := time.Now()
-		m.mu.Lock()
-		m.lastArchive = now
-		m.archiveClips = clips
-		m.archiveBytes = bytes
-		m.cumulative.TotalClips += clips
-		m.cumulative.TotalBytes += bytes
-		m.cumulative.ArchiveCount++
-		m.cumulative.LastArchive = now
-		cumSnapshot := m.cumulative
-		m.mu.Unlock()
-		os.WriteFile(lastArchiveFile, []byte(now.Format(time.RFC3339)), 0644)
-		if statsData, err := json.Marshal(cumSnapshot); err == nil {
-			if err := os.WriteFile(statsFile, statsData, 0644); err != nil {
-				log.Printf("save stats: %v", err)
-			}
-		}
-		notify.Send(ctx, webhook.Event{
+		m.updateAndPersistStats(clips, bytes)
+		m.deps.Notify.Send(ctx, webhook.Event{
 			Event:   "archive_complete",
 			Message: fmt.Sprintf("Archived %d clips in %s", clips, duration.Round(time.Second)),
 			Data: map[string]any{
@@ -293,28 +308,26 @@ func (m *Machine) runArchiving(ctx context.Context) {
 		})
 	}
 
-	archive.ManageFreeSpace()
+	m.deps.Archive.ManageFreeSpace()
 	m.setState(StateIdle)
 }
 
 func (m *Machine) runIdle(ctx context.Context) {
-	system.SetLED("heartbeat")
+	m.deps.System.SetLED("heartbeat")
+	m.deps.KeepAwake.Send(ctx, "stop")
 
-	cfg := config.Get()
-	m.sendKeepAwake(ctx, cfg, "stop")
+	m.deps.Archive.UnmountArchive()
+	m.deps.Disk.Unmount()
 
-	archive.UnmountArchive()
-	disk.Unmount()
-
-	if err := gadget.Enable(disk.BackingFile); err != nil {
+	if err := m.deps.Gadget.Enable(m.deps.Disk.BackingFilePath()); err != nil {
 		log.Printf("warning: gadget re-enable failed: %v", err)
 		m.gadgetEnabled = false
 	} else {
 		m.gadgetEnabled = true
-		notify.Send(ctx, webhook.Event{Event: "usb_connected", Message: "USB gadget re-enabled"})
+		m.deps.Notify.Send(ctx, webhook.Event{Event: "usb_connected", Message: "USB gadget re-enabled"})
 	}
 
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -322,41 +335,15 @@ func (m *Machine) runIdle(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Retry gadget if it failed
-			if !m.gadgetEnabled {
-				if err := gadget.Enable(disk.BackingFile); err == nil {
-					m.gadgetEnabled = true
-					log.Println("USB gadget enabled (delayed)")
-					notify.Send(ctx, webhook.Event{Event: "usb_connected", Message: "USB gadget re-enabled"})
-				}
+			if m.tryEnableGadget() {
+				m.deps.Notify.Send(ctx, webhook.Event{Event: "usb_connected", Message: "USB gadget re-enabled"})
 			}
-			if !archive.IsReachable() {
+			if !m.deps.Archive.IsReachable() {
 				log.Println("archive server unreachable — user left home")
 				m.setState(StateAway)
-				system.SetLED("slowblink")
+				m.deps.System.SetLED("slowblink")
 				return
 			}
-		}
-	}
-}
-
-func (m *Machine) sendKeepAwake(ctx context.Context, cfg *config.Config, command string) {
-	if cfg == nil {
-		return
-	}
-	switch cfg.KeepAwake.Method {
-	case "ble":
-		if cfg.KeepAwake.VIN != "" {
-			if command == "stop" {
-				ble.SentryOff(cfg.KeepAwake.VIN)
-			} else {
-				ble.KeepAwake(cfg.KeepAwake.VIN)
-			}
-		}
-	case "webhook":
-		if cfg.KeepAwake.WebhookURL != "" {
-			// Send flat {"awake_command":"..."} matching original teslausb format
-			webhook.SendRaw(ctx, cfg.KeepAwake.WebhookURL, map[string]string{"awake_command": command})
 		}
 	}
 }

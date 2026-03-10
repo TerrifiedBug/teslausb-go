@@ -79,10 +79,17 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// Get returns a shallow copy of the current config.
+// Safe because Config contains only value-type fields.
+// If slice/map fields are added, switch to a deep copy.
 func Get() *Config {
 	mu.RLock()
 	defer mu.RUnlock()
-	return current
+	if current == nil {
+		return nil
+	}
+	cp := *current
+	return &cp
 }
 
 func Save(path string, cfg *Config) error {

@@ -16,6 +16,8 @@ import (
 
 const ArchiveMount = "/mnt/archive"
 
+const tcpDialTimeout = 5 * time.Second
+
 // IsReachable checks if the archive server is reachable via TCP.
 func IsReachable() bool {
 	cfg := config.Get()
@@ -32,7 +34,7 @@ func tcpReachable(host, port string) bool {
 	if host == "" {
 		return false
 	}
-	conn, err := net.DialTimeout("tcp", host+":"+port, 5*time.Second)
+	conn, err := net.DialTimeout("tcp", host+":"+port, tcpDialTimeout)
 	if err != nil {
 		return false
 	}
